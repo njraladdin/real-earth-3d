@@ -1,0 +1,21 @@
+i tested same colmap and same iteration number on official dataset and resutl was decent. 
+problem was with our dataset. there hsould be way more overlap between images and only 20% new content in each image. rotate around a single object 
+
+
+
+TODO    
+test more places, only get picture then skip then picture 
+
+guide  to setup project, clean up project structure, push to github 
+
+simple preview a splat on the web in frontend
+
+splat editor, a tool to clean it up 
+
+preview multiple  connected splats 
+
+future: 
+dynamic splat map 
+setup sky and nice effects 
+
+set up proper backend (host files on firebase)
