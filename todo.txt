@@ -6,7 +6,7 @@ trying to match two seperate splats togehter looks sloppy. let's try making spla
 limit images to 70, focused 
 
 TODO    
-- quantify quality of colmap model 
+- quantify quality of colmap model, done 
 - test video (with more frames)
 - add images to exisitng colmap model
 - compare splats beofre vs after merging images (of a window for example, was it aded proeprly to the splat? )
