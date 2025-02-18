@@ -2,3 +2,6 @@ experimentation/
 dataset/
 OpenSplat/
 colmap/
+libtorch/
+opencv/
+

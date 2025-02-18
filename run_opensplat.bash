@@ -16,4 +16,4 @@ cmake --build . --config Release
 
 cd Release
 
-./opensplat c:/Users/Mega-PC/Desktop/projects/map_to_3d/dataset -n 3000
+./opensplat c:/Users/Mega-PC/Desktop/projects/map_to_3d/dataset -n 1000

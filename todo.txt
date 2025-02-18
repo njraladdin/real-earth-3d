@@ -1,18 +1,34 @@
 i tested same colmap and same iteration number on official dataset and resutl was decent. 
 problem was with our dataset. there hsould be way more overlap between images and only 20% new content in each image. rotate around a single object 
 
+trying to match two seperate splats togehter looks sloppy. let's try making splats big, and merging them. 
 
+limit images to 70, focused 
 
 TODO    
-test more places, only get picture then skip then picture 
+- add images to exisitng colmap model
+- compare splats beofre vs after merging images (of a window for example, was it aded proeprly to the splat? )
 
-guide  to setup project, clean up project structure, push to github 
+
+test more places, only get picture then skip then picture. test rotating around object, then rotate naother object etc. 
+
+test merging splats 
+
+
+APPRAOCH: the whole thing be a single splat. to add new images, extract features and merge to exising colmap model, then rerun opensplat. 
+so you can add a window, a chair etc. 
+by seeing the splat, you can see which areas need more images. 
+to expland, take images of slightly visible parts in the splat (meaning they can be matched to the splat)
+
+the giant splat would be split in chunks when previewing on the web
+
+--
 
 simple preview a splat on the web in frontend
 
-splat editor, a tool to clean it up 
+preview multiple connected splats 
 
-preview multiple  connected splats 
+
 
 future: 
 dynamic splat map 
