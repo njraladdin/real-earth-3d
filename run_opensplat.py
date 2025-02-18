@@ -1,6 +1,8 @@
 import os
 import subprocess
 from pathlib import Path
+import shutil
+from datetime import datetime
 
 def run_command(command, cwd=None, shell=False):
     """Run a command and check for errors"""
@@ -74,6 +76,21 @@ def run_opensplat_pipeline(
         dataset_path,
         "-n", str(num_points)
     ])
+
+    # Copy the output splat file with timestamp
+    splat_file = release_dir / "splat.ply"
+    if splat_file.exists():
+        # Create recent_splats directory if it doesn't exist
+        recent_splats_dir = Path("recent_splats")
+        recent_splats_dir.mkdir(exist_ok=True)
+        
+        # Generate timestamp and new filename
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        new_splat_file = recent_splats_dir / f"splat_{timestamp}.ply"
+        
+        # Copy the file
+        shutil.copy2(splat_file, new_splat_file)
+        print(f"Copied splat file to: {new_splat_file}")
 
 if __name__ == "__main__":
     try:
