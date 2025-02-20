@@ -25,8 +25,8 @@ def run_opensplat_pipeline(
     libtorch_path=r"C:\Users\Mega-PC\Desktop\projects\map_to_3d\libtorch",
     opencv_path=r"C:\Users\Mega-PC\Desktop\projects\map_to_3d\opencv\build",
     cuda_path=r"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.5",
-    dataset_path=r"C:\Users\Mega-PC\Desktop\projects\map_to_3d\dataset",
-    num_points=1000
+    dataset_path="dataset_merged",
+    num_points=1500
 ):
     """
     Run the OpenSplat pipeline
@@ -35,7 +35,7 @@ def run_opensplat_pipeline(
         libtorch_path (str): Path to libtorch installation
         opencv_path (str): Path to OpenCV build directory
         cuda_path (str): Path to CUDA installation
-        dataset_path (str): Path to the dataset
+        dataset_path (str): Path to the dataset (relative to script directory or absolute)
         num_points (int): Number of points to process
     """
     # Setup Visual Studio environment
@@ -44,6 +44,9 @@ def run_opensplat_pipeline(
 
     # Get the script's directory for consistent paths
     script_dir = Path(__file__).parent.absolute()
+    
+    # Convert dataset_path to absolute path if it's relative
+    dataset_path = str(script_dir / dataset_path)
     
     # Clone OpenSplat if not exists
     opensplat_dir = script_dir / "OpenSplat"
@@ -88,7 +91,7 @@ def run_opensplat_pipeline(
         "-n", str(num_points)
     ], cwd=str(release_dir))  # Added cwd parameter to ensure splat.ply is created in Release directory
 
-    # Copy the output splat file with timestamp
+    # Copy the output splat file with timestamp and to dataset
     splat_file = release_dir / "splat.ply"
     if splat_file.exists():
         # Create recent_splats directory if it doesn't exist
@@ -99,9 +102,14 @@ def run_opensplat_pipeline(
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         new_splat_file = recent_splats_dir / f"splat_{timestamp}.ply"
         
-        # Copy the file
+        # Copy the file to recent_splats with timestamp
         shutil.copy2(splat_file, new_splat_file)
         print(f"Copied splat file to: {new_splat_file}")
+
+        # Also copy to dataset folder
+        dataset_splat_file = Path(dataset_path) / "splat.ply"
+        shutil.copy2(splat_file, dataset_splat_file)
+        print(f"Copied splat file to dataset: {dataset_splat_file}")
 
 if __name__ == "__main__":
     try:

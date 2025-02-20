@@ -114,16 +114,96 @@ def calculate_quality_score(stats, total_images):
     
     return round(score, 1)
 
+def sort_images_by_location(sparse_path, dataset_path, output_path, sort_method='path'):
+    """
+    Sort images based on their physical location from COLMAP reconstruction.
+    
+    Args:
+        sparse_path (Path): Path to the sparse reconstruction folder
+        dataset_path (Path): Path to the original dataset folder
+        output_path (Path): Path where sorted images will be saved
+        sort_method (str): Sorting method to use:
+            'distance' - sort by distance from origin
+            'path' - sort by trying to find a continuous path
+            'x' - sort by X coordinate
+            'y' - sort by Y coordinate
+            'z' - sort by Z coordinate
+    """
+    images_txt = sparse_path / "images.txt"
+    if not images_txt.exists():
+        print("Warning: images.txt not found! Cannot sort images.")
+        return
+        
+    output_path.mkdir(exist_ok=True)
+    
+    # Read and parse images.txt
+    images = []
+    with open(images_txt, 'r') as f:
+        while True:
+            line = f.readline()
+            if not line or not line.startswith('#'):
+                break
+                
+        while line:
+            if line.strip() and not line.startswith('#'):
+                parts = line.strip().split()
+                if len(parts) >= 10:  # Image line
+                    image_name = parts[-1]
+                    tx, ty, tz = map(float, parts[5:8])  # Extract position
+                    images.append((image_name, tx, ty, tz))
+                    f.readline()  # Skip points line
+            line = f.readline()
+    
+    if not images:
+        print("No images found in reconstruction!")
+        return
 
+    # Sort images based on selected method
+    if sort_method == 'distance':
+        # Sort by distance from origin
+        sorted_images = sorted(images, 
+            key=lambda x: (x[1]**2 + x[2]**2 + x[3]**2)**0.5)
+    
+    elif sort_method == 'path':
+        # Try to find a continuous path through the cameras
+        sorted_images = [images[0]]  # Start with first image
+        remaining = images[1:]
+        
+        while remaining:
+            last = sorted_images[-1]
+            # Find closest remaining image to the last one
+            closest = min(remaining, 
+                key=lambda x: ((x[1]-last[1])**2 + 
+                             (x[2]-last[2])**2 + 
+                             (x[3]-last[3])**2)**0.5)
+            sorted_images.append(closest)
+            remaining.remove(closest)
+    
+    elif sort_method in ['x', 'y', 'z']:
+        # Sort by specific coordinate
+        coord_idx = {'x': 1, 'y': 2, 'z': 3}[sort_method]
+        sorted_images = sorted(images, key=lambda x: x[coord_idx])
+    
+    else:
+        print(f"Unknown sort method: {sort_method}")
+        return
 
-def run_colmap_pipeline(dataset_path="dataset", input_images_path=None, cleanup_existing=True):
+    # Copy images with new sorted names
+    for idx, (image_name, *_) in enumerate(sorted_images, 1):
+        original_path = dataset_path / "images" / image_name
+        ext = original_path.suffix
+        new_name = f"image_{idx:04d}{ext}"
+        shutil.copy2(original_path, output_path / new_name)
+        print(f"Copied {image_name} -> {new_name}")
+
+    print(f"\nSorted {len(sorted_images)} images using '{sort_method}' method")
+
+def run_colmap_pipeline(dataset_path="dataset"):
     """
     Run the COLMAP SfM pipeline on a dataset.
     
     Args:
         dataset_path (str): Path to the dataset directory containing an 'images' folder
-        input_images_path (str, optional): Path to input images to be copied to dataset/images
-        cleanup_existing (bool): Whether to clean up existing files in the dataset directory (default: True)
     """
     dataset_path = Path(dataset_path)
     images_path = dataset_path / "images"
@@ -131,55 +211,32 @@ def run_colmap_pipeline(dataset_path="dataset", input_images_path=None, cleanup_
     sparse_path = dataset_path / "sparse"
     vocab_tree_path = Path("vocab_tree_flickr100K_words32K.bin")
 
-    # Create dataset directory if it doesn't exist
-    dataset_path.mkdir(exist_ok=True, parents=True)
-
-    # Clean up existing files if cleanup_existing is True
-    if cleanup_existing:
-        print("Cleaning up existing files...")
-        try:
-            if sparse_path.exists():
-                shutil.rmtree(sparse_path)
-            if database_path.exists():
-                database_path.unlink()
-            # Only delete images directory if we're copying new images
-            if input_images_path and images_path.exists():
-                shutil.rmtree(images_path)
-        except PermissionError as e:
-            raise RuntimeError(f"Failed to delete existing files - permission denied. Please check if any other programs are using the files.\nError: {e}")
-        except OSError as e:
-            raise RuntimeError(f"Failed to delete existing files.\nError: {e}")
-
-    # Create images directory only if we're copying new images or it doesn't exist
-    if input_images_path or not images_path.exists():
-        images_path.mkdir(exist_ok=True, parents=True)
-
-    # If input_images_path is provided, copy images to dataset/images
-    if input_images_path:
-        input_images_path = Path(input_images_path)
-        if not input_images_path.exists():
-            raise FileNotFoundError(f"Error: Input images path {input_images_path} not found!")
-        
-        print(f"Copying images from {input_images_path} to {images_path}...")
-        for ext in ['*.jpg', '*.JPG', '*.png', '*.PNG']:
-            for img_file in input_images_path.glob(ext):
-                shutil.copy2(img_file, images_path)
-
-    if not images_path.exists() or not any(images_path.iterdir()):
-        raise FileNotFoundError(f"Error: No images found in {images_path}!")
+    if not images_path.exists():
+        raise FileNotFoundError(f"Error: {images_path} folder not found!")
 
     if not vocab_tree_path.exists():
         raise FileNotFoundError(f"Error: Vocabulary tree file not found at {vocab_tree_path}")
 
     print("Starting COLMAP pipeline...")
 
+    # Clean up existing files
+    print("Cleaning up existing files...")
+    try:
+        if sparse_path.exists():
+            shutil.rmtree(sparse_path)
+        if database_path.exists():
+            database_path.unlink()
+    except PermissionError as e:
+        raise RuntimeError(f"Failed to delete existing files - permission denied. Please check if any other programs are using the files.\nError: {e}")
+    except OSError as e:
+        raise RuntimeError(f"Failed to delete existing files.\nError: {e}")
+
     # Step 1: Feature Extraction
     print("Step 1: Extracting features...")
     run_command([
         "colmap", "feature_extractor",
         "--database_path", str(database_path),
-        "--image_path", str(images_path),
-        "--SiftExtraction.max_num_features", "1024"  # Reduced from default 8192
+        "--image_path", str(images_path)
     ])
 
     # Step 2: Feature Matching using Vocabulary Tree
@@ -257,6 +314,13 @@ def run_colmap_pipeline(dataset_path="dataset", input_images_path=None, cleanup_
             print(f"- {warning}")
 
     print("\nCOLMAP pipeline completed successfully!")
+    
+    # Add sorting functionality
+    print("\nSorting images by physical location...")
+    sorted_images_path = Path(dataset_path) / "sorted_images"
+    # Try the 'path' method which often gives better results
+    sort_images_by_location(sparse_path, Path(dataset_path), sorted_images_path, 
+                          sort_method='path')
     
     return stats
 
