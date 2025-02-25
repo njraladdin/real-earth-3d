@@ -24,10 +24,24 @@ expansion_images_removed_by_filtration/
 initial_images_grouped/
 GroundingDINO/
 Groundingdino/
-
+Hierarchical-Localization/
+uploads/
 *.pth
 *.bin
 *.json
 *.pt
 *.pkl
 *.pth.tar
+initial_images_filtered/
+*.ply 
+
+*.splat
+
+.env
+camera_images
+initial_images_registered
+initial_images_unregistered
+
+initial_images_removed_by_filtration
+hloc_output
+camera images/

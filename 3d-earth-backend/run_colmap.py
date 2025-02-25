@@ -7,10 +7,24 @@ import sqlite3
 def run_command(command):
     """Run a command and check for errors"""
     try:
-        subprocess.run(command, check=True)
+        process = subprocess.run(
+            command, 
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        return process.stdout
     except subprocess.CalledProcessError as e:
         print(f"Error running command: {' '.join(command)}")
-        raise e
+        print(f"Error output: {e.stderr}")
+        # Check for specific COLMAP errors
+        if "No good initial image pair found" in e.stderr:
+            raise RuntimeError("COLMAP could not find a good initial image pair. Try adding more images with better overlap.")
+        elif "failed to create sparse model" in e.stderr:
+            raise RuntimeError("COLMAP failed to create a sparse model. The images may not have enough visual overlap.")
+        else:
+            raise e
 
 def read_reconstruction_stats(sparse_path):
     """
@@ -156,12 +170,38 @@ def run_colmap_pipeline(dataset_path="dataset", input_images_path=None, cleanup_
         dataset_path (str): Path to the dataset directory containing an 'images' folder
         input_images_path (str, optional): Path to input images to be copied to dataset/images
         cleanup_existing (bool): Whether to clean up existing files in the dataset directory (default: True)
+        
+    Returns:
+        dict: Statistics about the reconstruction
     """
     dataset_path = Path(dataset_path)
     images_path = dataset_path / "images"
     database_path = dataset_path / "database.db"
     sparse_path = dataset_path / "sparse"
-    vocab_tree_path = Path("vocab_tree_flickr100K_words32K.bin")
+    
+    # Look for vocab tree in multiple locations
+    vocab_tree_paths = [
+        Path("vocab_tree_flickr100K_words32K.bin"),
+        Path(__file__).parent / "vocab_tree_flickr100K_words32K.bin",
+        Path("/usr/local/share/colmap/vocab_tree_flickr100K_words32K.bin"),
+        Path("C:/Program Files/COLMAP/vocab_tree_flickr100K_words32K.bin")
+    ]
+    
+    vocab_tree_path = None
+    for path in vocab_tree_paths:
+        if path.exists():
+            vocab_tree_path = path
+            break
+    
+    if not vocab_tree_path:
+        # If vocab tree not found, download it
+        import urllib.request
+        print("Vocabulary tree not found. Downloading...")
+        vocab_tree_path = Path(__file__).parent / "vocab_tree_flickr100K_words32K.bin"
+        urllib.request.urlretrieve(
+            "https://demuc.de/colmap/vocab_tree_flickr100K_words32K.bin",
+            vocab_tree_path
+        )
 
     # Create dataset directory if it doesn't exist
     dataset_path.mkdir(exist_ok=True, parents=True)
@@ -242,12 +282,20 @@ def run_colmap_pipeline(dataset_path="dataset", input_images_path=None, cleanup_
 
     # Step 5: Convert the model to TXT format
     print("Step 5: Converting model to TXT format...")
-    run_command([
-        "colmap", "model_converter",
-        "--input_path", str(sparse_path / "0"),
-        "--output_path", str(sparse_path),
-        "--output_type", "TXT"
-    ])
+    model_path = sparse_path / "0"
+    if model_path.exists():
+        run_command([
+            "colmap", "model_converter",
+            "--input_path", str(model_path),
+            "--output_path", str(sparse_path),
+            "--output_type", "TXT"
+        ])
+    else:
+        print("Warning: No reconstruction model found. COLMAP may have failed to register any images.")
+        # Create empty text files to avoid errors in downstream processing
+        (sparse_path / "cameras.txt").touch()
+        (sparse_path / "images.txt").touch()
+        (sparse_path / "points3D.txt").touch()
 
     # Analyze the reconstruction
     print("\nAnalyzing reconstruction quality...")
@@ -257,6 +305,9 @@ def run_colmap_pipeline(dataset_path="dataset", input_images_path=None, cleanup_
     stats = read_reconstruction_stats(sparse_path)
     quality_score = calculate_quality_score(stats, total_images)
     
+    # Add total_images to stats
+    stats['total_images'] = total_images
+    
     print("\nReconstruction Quality Metrics:")
     print(f"Total images in dataset: {total_images}")
     print(f"Registered images: {stats['registered_images']} ({(stats['registered_images']/total_images)*100:.1f}%)")
@@ -264,7 +315,6 @@ def run_colmap_pipeline(dataset_path="dataset", input_images_path=None, cleanup_
     print(f"Average track length: {stats['average_track_length']:.2f} images per 3D point")
     print(f"Average observations per image: {stats['average_observations_per_image']:.2f} points per image")
     print(f"\nOverall Quality Score: {quality_score}/100")
-    
     if quality_score >= 90:
         print("📸 Excellent reconstruction quality!")
     elif quality_score >= 75:
@@ -272,66 +322,10 @@ def run_colmap_pipeline(dataset_path="dataset", input_images_path=None, cleanup_
     elif quality_score >= 60:
         print("👍 Acceptable reconstruction quality")
     else:
-        print("⚠️ Poor reconstruction quality")
+        print("⚠️ Poor reconstruction quality")    
+    # Skip the registered/unregistered image copying for server integration
+    # as we don't need those files for the splat generation
     
-    # You might want to consider the reconstruction poor if:
-    warnings = []
-    if stats['registered_images'] / total_images < 0.8:
-        warnings.append("Less than 80% of images were registered!")
-    if stats['average_track_length'] < 3:
-        warnings.append("Average track length is low (< 3 images per point)")
-    if stats['average_track_length'] > 7:
-        warnings.append("Average track length is high (> 7 images per point)")
-    
-    if warnings:
-        print("\nWarnings:")
-        for warning in warnings:
-            print(f"- {warning}")
-
-    # After reconstruction analysis, modify this part:
-    print("\nAnalyzing registered vs unregistered images...")
-    registered_images = get_registered_images(database_path, sparse_path)
-    
-    # Get all input images
-    all_images = set()
-    for ext in ['*.jpg', '*.JPG', '*.png', '*.PNG']:
-        all_images.update(f.name for f in images_path.glob(ext))
-    
-    unregistered_images = all_images - registered_images
-    
-    # Create folders outside dataset directory
-    parent_dir = dataset_path.parent
-    registered_path = parent_dir / "initial_images_registered"
-    unregistered_path = parent_dir / "initial_images_unregistered"
-    
-    # Clear existing folders if they exist
-    if registered_path.exists():
-        shutil.rmtree(registered_path)
-    if unregistered_path.exists():
-        shutil.rmtree(unregistered_path)
-        
-    # Create fresh empty folders
-    registered_path.mkdir(exist_ok=True)
-    unregistered_path.mkdir(exist_ok=True)
-    
-    # Copy registered images
-    print(f"\nCopying {len(registered_images)} registered images to {registered_path}")
-    for img_name in registered_images:
-        src = images_path / img_name
-        dst = registered_path / img_name
-        shutil.copy2(src, dst)
-    
-    # Copy unregistered images
-    print(f"Copying {len(unregistered_images)} unregistered images to {unregistered_path}")
-    for img_name in unregistered_images:
-        src = images_path / img_name
-        dst = unregistered_path / img_name
-        shutil.copy2(src, dst)
-    
-    print(f"\nRegistered images: {len(registered_images)}/{len(all_images)} ({len(registered_images)/len(all_images)*100:.1f}%)")
-    print(f"Registered images saved to: {registered_path}")
-    print(f"Unregistered images saved to: {unregistered_path}")
-
     print("\nCOLMAP pipeline completed successfully!")
     
     return stats

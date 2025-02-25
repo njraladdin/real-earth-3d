@@ -3,7 +3,7 @@ from run_opensplat import run_opensplat_pipeline
 def main():
     try:
         # Run OpenSplat with dataset_main path
-        dataset_path = "dataset_merged"
+        dataset_path = "hloc_output/sfm"
         run_opensplat_pipeline(
             dataset_path=dataset_path
         )

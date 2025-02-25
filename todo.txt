@@ -12,111 +12,51 @@ now when we want to add new images, we get the group of images that are closest 
 *reducing max features make the process way faster, so use that to be able to run 100 images at a time
 *running images aounrd a big location increases the change of it being confused and objects apepar in wrong places
 
-appraoch: 
-- add 50 images aorund a single object 
-- keep track of position of each image camera 
-- when adding new images, you pick the location where the new images were taken, it grabs the nearest 20 images, you run colamp and splat nad see if it's good 
-if it's good, you merge the new images into the main dataset 
 
-so what to do : 
-- get position of each image we have in the main dataset, preview them on a UI where each image is placed basedon it's real position. 
-when you click on an image you save it and the nearest neighbours into a folder 
-the image oyu clicked is the closest to the object then ewi mages have filmed 
-run colmap on the new images + nearest neighbours of image oyu picked 
+* rotate adn take around 20 images in your place. move 2 steps into a visible area. repeat. this is good enough to make large scale splats.
 
-SO IN THE IFNAL PRODUCT: 
-the user would navigate the map and go to the point wher he tooks the images (edge of the splat on that tile), and he submits the images. we would take then earest images and run them with new images to see how good they fit then merge
+APPRAOCH: 
+- we work in spots 
+- each spot is taking 20 images while rotating in the same place 
+- you add a new sport. you test it with nearby visible spots
 
----
-thinking: 
+- we have a frontend to display map tiles 
+- each tile is 1000 square meters 
+- each splat has it's own tile 
+- you can adjust each splat to fit the tile perfectly 
 
-appraoch 1: big map tiles, each map tile splat requires 500 images. rerun whole tile after new images
-challenge: creating colmap model and splat with 500 images very slow. some images could be bad 
-solutions: 
-    - start  with 50 images. when you want to add 10 new images (to add a new object), don't rerun whole 60 images,
-    but get the nearby images from the 50 images and rerun those with then new images 
-    - way to find if the new images have enough overlap between each other 
-    - way to find if the new images have enough overlap with relevant exising images
-    - way to get nearby images from the existing images with new images 
+UI: 
+- you can browse the map tiles 
+- you can add new images to the tile splat you are currently in 
 
+USER FLOW: 
+browse exisitng map tiles. 
+you go to target tile 
+you can see a list of exising spots for this tile and each spots images 
+you can submit a new spot 
 
+splat gets rerun with new spot images  
 
-appraoch 2: smaller map tiles of 10m x 10m, each tile  requires les than 100 images. 
-challenge: normalizing splats size, general direction (no need for automatic accurate alignement, just direction and rotation)
-
-
-TAKEN STRATEGY: 
-first time: 
-add 10 images of an object
-if this is the first time we add images, create dataset_main folder 
-split image into groups based on object in focus
-run colmap on dataset_main, run splat on dataset_main
-
-expansion: 
-add 10 images of nearby object 
-get relevant group of images from dataset_main
-if there is no relevant group, abort 
-
-put new images and relevant group in new dataset folder dataset_new/images (clear dataset_new before starting)
-run colmap on dataset_new
-
-if colmap run succesful, run splat on dataset_new
-if splat is good, merge dataset_new into dataset_merged 
+system flow : 
+-user submits new spot iamges + map tile id 
+-we run matching to check if there are exisitng spots that are similar to new images to see if it's valid 
+- if it's valid we run colmap with the relevant spots 
+- if colmap valid we run splat 
+- we return this smaller splat in previewer link to user 
+- we cna either approve or reject new spot 
 
 
 
 
-Folder structure:
-initial_images/   (for creating new splat from scratch)
-expansion_images/ (for adding to existing splat)
-dataset_main/     (validated working dataset)
-    ├── images/
-    ├── colmap_sparse/
-    └── splat/
-dataset_staging/  (temporary workspace)
-    ├── images/
-    ├── colmap_sparse/
-    └── splat/
+TODO NEXT: 
+- preview splat on frontend, be able to adjust it (scale, roation, translation), done 
+- change database structure to the spots appraoch. we have only one splat per tile, and each splat have multiple spots. you can add more spots, or delete, done  
+- store images in backend instead of firebase (only splats are stored in firebase), done 
+- create api endpoint to run splat (colmap then splat). in frontend you can select spots, and request new splat, done 
 
-Flow 1: Creating new splat from scratch
-1. Put initial images in initial_images/
-process images to only keep the ones 
-2. Copy one of the groups to dataset_main/images
-3. Run run_colmap.py on dataset_main
-4. Run run_opensplat.py on dataset_main
+- ability to directly upload splat (for easier testing)
 
-Flow 2: Adding new images to existing splat
-1. Put new images in expansion_images/
-split images into groups based on object in focus
-
-3. Get relevant group from dataset_main/images to match with a new group, if none, abort 
-4. Copy relevant group + expansion_images/* to dataset_staging/images
-5. Run run_colmap.py on dataset_staging
-   - If fails, stop here
-6. Run run_opensplat.py on dataset_staging
-   - If looks good, continue. If not, stop here
-7. Merge dataset_staging into dataset_main
-8. Create main splat from dataset_main
-
--
-
-basic pipeline: 
-new: 
-filter images to only focused ones 
-run colmap 
-run splat 
-add new images as a new group 
-
-expand:
-filter images to only focused ones 
-
-match new images with a group of images in the exising dataset 
-run colmap
-run splat 
-review result 
-
-if good, merge new dataset into main dataset 
-add new images as a new group 
+- use different firestore collection for dev / production (dev is local, production is firebase). backedn is usually only needed for creating splats. when testing, i don't want the created splats / spots to show up in production. use local or diffferent collection 
 
 
 
@@ -130,13 +70,8 @@ TODO
 - group images by the object in focus, done 
 - script to get most relevant group of images with new images. put all in new folder, done 
 - if new images + relevant group splat was good, then merge the new images into the main dataset. need main dataset + new/merged dataset, done 
-
-
 - preview colmap images based on each image camera position, done 
-- script to process images, only keep the imlages that incldue the most common object  
 
-
-MAKE ADDING TO NEW GROUP IN DATASET A SEPERATE TEST 
 
 - fast way to check if new images ar overlapping enough with exising images without a whole colmap run (if images arte eligible to be added)
 - test new images by creating a colmap model and splat with images that are nearest to them in the real place (do we have to group images basedo n physical location?)
