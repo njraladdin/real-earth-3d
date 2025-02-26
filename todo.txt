@@ -1,5 +1,4 @@
-
-learnings:
+LEARNINGS:
 
 i tested same colmap and same iteration number on official dataset and result  was decent. 
 problem was with our dataset. there hsould be way more overlap between images and only 20% new content in each image. rotate around a single object 
@@ -15,80 +14,27 @@ now when we want to add new images, we get the group of images that are closest 
 
 * rotate adn take around 20 images in your place. move 2 steps into a visible area. repeat. this is good enough to make large scale splats.
 
-APPRAOCH: 
-- we work in spots 
-- each spot is taking 20 images while rotating in the same place 
-- you add a new sport. you test it with nearby visible spots
+* creating spots for same tile in different days / time (outside) would most likely result in colmap failure. spots for a tile should be done once continously
 
-- we have a frontend to display map tiles 
-- each tile is 1000 square meters 
-- each splat has it's own tile 
-- you can adjust each splat to fit the tile perfectly 
+CURRENT APPROACH: 
+- frontend: view splats, upload splats, adjust splats. 
+- splat creation in backend: put images in input folder, run colmap, run opensplat, upload splat in frontend 
+- taking images: stand in place. take 20 images around you while rotating. move 2 stpes in a visible spot. repeat. 
 
-UI: 
-- you can browse the map tiles 
-- you can add new images to the tile splat you are currently in 
-
-USER FLOW: 
-browse exisitng map tiles. 
-you go to target tile 
-you can see a list of exising spots for this tile and each spots images 
-you can submit a new spot 
-
-splat gets rerun with new spot images  
-
-system flow : 
--user submits new spot iamges + map tile id 
--we run matching to check if there are exisitng spots that are similar to new images to see if it's valid 
-- if it's valid we run colmap with the relevant spots 
-- if colmap valid we run splat 
-- we return this smaller splat in previewer link to user 
-- we cna either approve or reject new spot 
-
-
-
-
-TODO NEXT: 
+TODO : 
 - preview splat on frontend, be able to adjust it (scale, roation, translation), done 
 - change database structure to the spots appraoch. we have only one splat per tile, and each splat have multiple spots. you can add more spots, or delete, done  
 - store images in backend instead of firebase (only splats are stored in firebase), done 
 - create api endpoint to run splat (colmap then splat). in frontend you can select spots, and request new splat, done 
-
-- ability to directly upload splat (for easier testing)
-
-- use different firestore collection for dev / production (dev is local, production is firebase). backedn is usually only needed for creating splats. when testing, i don't want the created splats / spots to show up in production. use local or diffferent collection 
-
-
+- simplfy frontend: only upload splats directly, manage splats, done  
+- backend: one input folder, run colmap and opesplat in different scripts, done 
+-gta style mini map based on actual current position (for easier navigation), done 
+- change single splat per tile appraoch: each splat would have a posiiton, update firestore schema. done 
 
 
----
-TODO    
-- quantify quality of colmap model, done 
-- test video (with more frames) (not good results with camera quality), done
-- add images to exisitng colmap model (needs overlapping images, doesnt work for simply adding new images), done 
-
-- group images by the object in focus, done 
-- script to get most relevant group of images with new images. put all in new folder, done 
-- if new images + relevant group splat was good, then merge the new images into the main dataset. need main dataset + new/merged dataset, done 
-- preview colmap images based on each image camera position, done 
-
-
-- fast way to check if new images ar overlapping enough with exising images without a whole colmap run (if images arte eligible to be added)
-- test new images by creating a colmap model and splat with images that are nearest to them in the real place (do we have to group images basedo n physical location?)
-so you can slowly expand the splat, without running the whole thing (cruicial, i just rana 400 images andin the end it wasnt good, 3 images matched)
+- make it easier to adjust a splat (rotation, transation)
 
 
 
 
 
-
-- simple preview a splat on the web in frontend
-- preview multiple connected splats 
-
-
-
-future: 
-dynamic splat map 
-setup sky and nice effects 
-
-set up proper backend (host files on firebase)

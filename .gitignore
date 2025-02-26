@@ -45,3 +45,6 @@ initial_images_unregistered
 initial_images_removed_by_filtration
 hloc_output
 camera images/
+colmap_output/
+input_images/
+Hierarchical-Localization
