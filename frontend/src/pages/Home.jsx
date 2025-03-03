@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState, forwardRef, Suspense, useMemo } from 'react';
+import React, { useRef, useEffect, useState, forwardRef, Suspense, useMemo, createContext } from 'react';
 import { Canvas, useFrame, useThree, useLoader } from '@react-three/fiber';
 
 import { TextureLoader, Vector3 } from 'three';
@@ -11,13 +11,48 @@ import { doc, setDoc, getDoc, getDocs, deleteDoc, updateDoc, collection } from '
 import * as THREE from 'three';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader';
 import EXIF from 'exif-js';
+import { Skybox, SkyWithSun, OceanSurface } from '../components/SkyComponents';
 
+// Create a context to share the sun position between components
+const SunContext = createContext(null);
 
+// Sun Provider component to manage and share sun position
+const SunProvider = ({ children }) => {
+  const sunPosition = useRef(new THREE.Vector3(0, 1, 0));
+  
+  const updateSunPosition = (newPosition) => {
+    sunPosition.current.copy(newPosition);
+  };
+  
+  return (
+    <SunContext.Provider value={{ sunPosition: sunPosition.current, updateSunPosition }}>
+      {children}
+    </SunContext.Provider>
+  );
+};
+
+// Modified SkyWithSun component that updates the shared sun position
+const ConnectedSkyWithSun = () => {
+  const { updateSunPosition } = React.useContext(SunContext);
+  
+  return (
+    <SkyWithSun onSunPositionChange={updateSunPosition} />
+  );
+};
+
+// Modified OceanSurface that gets the sun position from context
+const ConnectedOceanSurface = (props) => {
+  const { sunPosition } = React.useContext(SunContext);
+  
+  return (
+    <OceanSurface {...props} sunPosition={sunPosition} />
+  );
+};
 
 //Config module 
 const Config = { API_KEY: '5bpPlOMeEXIFV9UuKHrW', CHUNK_SIZE: 10, 
   INITIAL_POSITION: { lat: 33.80358961071113, lng: 10.951546694824309 }, ZOOM_LEVEL: 20, 
-VOID_MODE: true };
+VOID_MODE: true, SHOW_BOUNDARIES: false };
 
 
 // Utilities module
@@ -123,17 +158,6 @@ const Utils = {
 };
 
 // Convert Components object members to individual React components
-
-const Skybox = ({ hdrPath }) => {
-  const texture = useLoader(RGBELoader, hdrPath);
-  texture.mapping = THREE.EquirectangularReflectionMapping;
-  return (
-    <mesh>
-      <sphereGeometry args={[500, 60, 40]} />
-      <meshBasicMaterial map={texture} side={THREE.BackSide} />
-    </mesh>
-  );
-};
 
 const Cube = forwardRef(({ onMove, camera, isPointerLocked }, ref) => {
   const velocity = useVelocity(isPointerLocked, onMove);
@@ -751,6 +775,7 @@ const SplatModel = React.memo(({ splatData, cameraPosition, isSelected, showBoun
         transparent={true}
         depthWrite={isPlayerInside} // Enable depth writing when camera is inside
         depthTest={true}
+        renderOrder={0} // Higher render order to ensure it renders after water
         userData={{ 
           centerBased: true,
           isPlayerInside: isPlayerInside
@@ -1032,7 +1057,7 @@ const App = () => {
   const [isClickingScene, setIsClickingScene] = useState(false);
   const [cameraPosition, setCameraPosition] = useState({ x: 0, y: 0, z: 0 });
   const [cubeLocalPosition, setCubeLocalPosition] = useState({ x: 0, z: 0 });
-  const [showBoundaries, setShowBoundaries] = useState(true);
+  const [showBoundaries, setShowBoundaries] = useState(Config.SHOW_BOUNDARIES);
 
   const fetchedPlatforms = useRef(new Set());
 
@@ -1382,7 +1407,7 @@ const App = () => {
         onMouseDown={handleSceneMouseDown}
         onMouseUp={handleSceneMouseUp}
       >
-        {Config.VOID_MODE && <color attach="background" args={['white']} />}
+        {Config.VOID_MODE && <color attach="background" args={['#001122']} />}
         <SceneController
           onMove={handleCubeMove}
           onRotate={handleCameraRotation}
@@ -1391,18 +1416,30 @@ const App = () => {
           isClickingScene={isClickingScene}
         />
         
-        {/* Render ground tiles */}
-        {!Config.VOID_MODE && [...platforms].filter(pos => data[pos]).map(pos => {
-          const [chunkX, chunkZ] = pos.split(',').map(Number);
-          return (
-            <Platform
-              key={`platform-${pos}`}
-              position={[chunkX * Config.CHUNK_SIZE, 0, chunkZ * Config.CHUNK_SIZE]}
-              texture={data[pos].texture}
-            />
-          );
-        })}
-
+        {!Config.VOID_MODE && (
+          <>
+            {/* Render ground tiles */}
+            {[...platforms].filter(pos => data[pos]).map(pos => {
+              const [chunkX, chunkZ] = pos.split(',').map(Number);
+              return (
+                <Platform
+                  key={`platform-${pos}`}
+                  position={[chunkX * Config.CHUNK_SIZE, 0, chunkZ * Config.CHUNK_SIZE]}
+                  texture={data[pos].texture}
+                />
+              );
+            })}
+            <Skybox hdrPath="/assets/images/sky.hdr" />
+          </>
+        )}
+        
+        {Config.VOID_MODE && (
+          <SunProvider>
+            <ConnectedSkyWithSun />
+            <ConnectedOceanSurface size={2000} position={[0, -5, 0]} waterOpacity={0.6} />
+          </SunProvider>
+        )}
+        
         {/* Render all splats using direct GPS coordinates */}
         {allSplats.map(splat => {
           if (!splat.coordinates) return null;
@@ -1445,8 +1482,7 @@ const App = () => {
             </Suspense>
           );
         })}
-
-        {!Config.VOID_MODE && <Skybox hdrPath="/assets/images/sky.hdr" />}
+        
         <directionalLight position={[10, 10, 10]} intensity={1.0} />
         <pointLight position={[0, 10, 0]} intensity={1.5} />
         <ambientLight intensity={1.5 * Math.PI} />

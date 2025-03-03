@@ -7,10 +7,8 @@ trying to match two seperate splats togehter looks sloppy.
 okay, so now we have grouped images by the object in focus. 
 now when we want to add new images, we get the group of images that are closest to the new image, and run colmap on them. 
 
-
 *reducing max features make the process way faster, so use that to be able to run 100 images at a time
 *running images aounrd a big location increases the change of it being confused and objects apepar in wrong places
-
 
 * rotate adn take around 20 images in your place. move 2 steps into a visible area. repeat. this is good enough to make large scale splats.
 
@@ -24,7 +22,6 @@ now when we want to add new images, we get the group of images that are closest 
 
 THINKING: 
 - since the end goal is to scan the whole world, we need 
-
 
 CURRENT APPROACH: 
 - frontend: view splats, upload splats, adjust splats. 
@@ -50,17 +47,17 @@ TODO :
 fix frontend:
 - fix deleting / add splats not udpate ui, done 
 - highlight selected splat, done 
+- clean up project, done 
 
 
-- fully clean up project 
-
-GOAL:*
-easy way to capture images for splats 
-splats are merged together smoothly 
-
- reliable way to expand 3d earth.
 
  FINAL LEARNINGS: 
 -> best camera technique is spot appraoch: stand in place, 20 images around you, move 2 steps, 20 images, repeat 
 -> open areas work best. avoid tight corridors / inside buildings 
 -> adjust splat in superspl.at
+-> don't scan randomly, just follow walkable areas 
+
+TODO :
+- scan around house 
+- scan field next to house (test partially, then fully)
+- scan following road from front house until badra field
