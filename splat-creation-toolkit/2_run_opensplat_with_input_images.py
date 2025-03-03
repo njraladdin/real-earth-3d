@@ -6,7 +6,8 @@ def main():
         # dataset_path = "hloc_output/sfm"
         dataset_path = "colmap_output"
         run_opensplat_pipeline(
-            dataset_path=dataset_path
+            dataset_path=dataset_path,
+            num_points=1100
         )
         print("Successfully ran OpenSplat pipeline")
         

@@ -16,11 +16,21 @@ now when we want to add new images, we get the group of images that are closest 
 
 * creating spots for same tile in different days / time (outside) would most likely result in colmap failure. spots for a tile should be done once continously
 
+* use suerpl.at for cleaning up the splat (manually, best result). go top view, polygon select main area. globe select main areas. small brush cleanup. make sure bounding box is as small as possible
+
+* stickign small splats for the same structure looks bad. splat should have a full structure 
+
+* get away from inside buildings. stick to open roads. spot appraoch 
+
+THINKING: 
+- since the end goal is to scan the whole world, we need 
+
+
 CURRENT APPROACH: 
 - frontend: view splats, upload splats, adjust splats. 
 - splat creation in backend: put images in input folder, run colmap, run opensplat, upload splat in frontend 
-- taking images: stand in place. take 20 images around you while rotating. move 2 stpes in a visible spot. repeat. 
-
+- taking images: 1- stand in place. take 20 images around you while rotating. move 2 stpes in a visible spot. repeat. 
+                  2- stand in place,  take 10 images. each image has 50% overlap with the previous one.  move 1 step in a visible spot. repeat. 
 TODO : 
 - preview splat on frontend, be able to adjust it (scale, roation, translation), done 
 - change database structure to the spots appraoch. we have only one splat per tile, and each splat have multiple spots. you can add more spots, or delete, done  
@@ -30,11 +40,27 @@ TODO :
 - backend: one input folder, run colmap and opesplat in different scripts, done 
 -gta style mini map based on actual current position (for easier navigation), done 
 - change single splat per tile appraoch: each splat would have a posiiton, update firestore schema. done 
+- process splat:  align with ground plane, remove unneccesary points (floating clouds), convert to .splat, done 
+- fix far away splat going over near splat, done 
+- test with only 10 images per spot, done 
+- make splat for front dar. so ful lsplats are dar, frontdar, jnen 
+- run splats with 5000 steps, done 
+- testing putting small chunks splats together. like each side of dar (looks good), done
+- fix splats depth still  not perfect. make distance calcualted form center, or when entering a splat, done 
+fix frontend:
+- fix deleting / add splats not udpate ui, done 
+- highlight selected splat, done 
 
 
-- make it easier to adjust a splat (rotation, transation)
+- fully clean up project 
 
+GOAL:*
+easy way to capture images for splats 
+splats are merged together smoothly 
 
+ reliable way to expand 3d earth.
 
-
-
+ FINAL LEARNINGS: 
+-> best camera technique is spot appraoch: stand in place, 20 images around you, move 2 steps, 20 images, repeat 
+-> open areas work best. avoid tight corridors / inside buildings 
+-> adjust splat in superspl.at
