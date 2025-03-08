@@ -211,7 +211,7 @@ def run_colmap_pipeline(dataset_path="dataset", input_images_path=None, cleanup_
         "colmap", "feature_extractor",
         "--database_path", str(database_path),
         "--image_path", str(images_path),
-        "--SiftExtraction.max_num_features", "1024"  # Reduced from default 8192
+        "--SiftExtraction.max_num_features", "4000"  # Reduced from default 8192
     ])
 
     # Step 2: Feature Matching using Vocabulary Tree

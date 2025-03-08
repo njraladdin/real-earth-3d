@@ -54,10 +54,27 @@ fix frontend:
  FINAL LEARNINGS: 
 -> best camera technique is spot appraoch: stand in place, 20 images around you, move 2 steps, 20 images, repeat 
 -> open areas work best. avoid tight corridors / inside buildings 
--> adjust splat in superspl.at
+-> adjust splat in superspl.at. trim until you leave only robust objects 
 -> don't scan randomly, just follow walkable areas 
 
 TODO :
-- scan around house 
-- scan field next to house (test partially, then fully)
-- scan following road from front house until badra field
+- scan a few areas, clean them up and add them, done 
+- deploy, done 
+
+- try compressing images, see difference in performance in colmap / opensplat (run same 500 iamges, can you run 5000 opensplat steps now?): not much difference, done 
+
+
+- be able to download / update a splat file. only trim splats form the parts where it would connect with another splat (the start and end of road) 
+- boundaries render order: fix calculating nearest object (simplfy : thge splat we're currently in has the highest render order, or fixing the center distance)
+- cover road from dar until ayyad castle (road + historical monument)
+
+FUTURE TODOS:
+- add minimap 
+- load character in a good place 
+- invisible borders 
+- hide config UI 
+- add intro animation 
+- add clear movement control  
+- don't load all splats at once 
+
+

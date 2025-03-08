@@ -12,6 +12,7 @@ import * as THREE from 'three';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader';
 import EXIF from 'exif-js';
 import { Skybox, SkyWithSun } from '../components/SkyComponents';
+import { SplatManager } from '../components/SplatManager';
 
 
 
@@ -239,234 +240,6 @@ const Slider = ({ label, value, onChange, min, max, step }) => {
         <span className="text-xs w-12 text-right">{value.toFixed(3)}</span>
       </div>
     </div>
-  );
-};
-
-const SplatManager = ({
-  playerPosition,
-  onSplatSelection,
-  selectedSplat,
-  onTeleport,
-  onSplatListUpdate
-}) => {
-  const [uploadingSplat, setUploadingSplat] = useState(false);
-  const [nearbySplats, setNearbySplats] = useState([]);
-  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
-  const lastFetchPosition = useRef(null);
-
-  useEffect(() => {
-    // Only fetch if we've moved significantly (e.g., more than 100 meters)
-    const shouldFetch = !lastFetchPosition.current ||
-      Math.abs(lastFetchPosition.current.lat - playerPosition.lat) > 0.001 ||
-      Math.abs(lastFetchPosition.current.lng - playerPosition.lng) > 0.001;
-
-    if (!shouldFetch) return;
-
-    const fetchNearbySplats = async () => {
-      try {
-        const splatsSnapshot = await getDocs(collection(db, 'splats'));
-        const splatsData = splatsSnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
-
-        setNearbySplats(splatsData);
-        lastFetchPosition.current = playerPosition;
-
-        if (selectedSplat && !selectedSplat._editing) {
-          const updatedSplat = splatsData.find(splat => splat.id === selectedSplat.id);
-          if (updatedSplat) {
-            onSplatSelection({
-              ...updatedSplat,
-              _editing: true
-            });
-          }
-        }
-      } catch (error) {
-        console.error("Error fetching splats:", error);
-      }
-    };
-
-    fetchNearbySplats();
-  }, [Math.floor(playerPosition.lat * 1000), Math.floor(playerPosition.lng * 1000)]); // Only update when position changes significantly
-
-  const handleUploadSplat = async (splatFile, coordinates, shouldTeleport = true) => {
-    setUploadingSplat(true);
-
-    try {
-      // Generate unique ID for the splat
-      const splatId = Date.now().toString();
-
-      // Upload to Firebase storage
-      const splatRef = ref(storage, `splats/${splatId}/${splatFile.name}`);
-      const uploadTask = uploadBytesResumable(splatRef, splatFile);
-
-      // Wait for upload to complete
-      await uploadTask;
-
-      // Get the download URL
-      const downloadURL = await getDownloadURL(splatRef);
-
-      // Create a new document in the splats collection
-      const newSplat = {
-        id: splatId,
-        name: splatFile.name,
-        url: downloadURL,
-        coordinates: coordinates,
-        position: [0, 1, 0],
-        rotation: [0, 0, 0],
-        scale: [0.5, 0.5, 0.5],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
-
-      await setDoc(doc(db, 'splats', splatId), newSplat);
-
-      // Update local state
-      setNearbySplats(prev => [...prev, newSplat]);
-      
-      // Notify parent component about the new splat
-      if (onSplatListUpdate) {
-        onSplatListUpdate([...nearbySplats, newSplat]);
-      }
-
-      // Add to local state and select it
-      onSplatSelection(newSplat);
-
-      // Only teleport if the flag is true
-      if (shouldTeleport) {
-        onTeleport(coordinates);
-      }
-
-      return newSplat;
-    } catch (error) {
-      console.error("Error uploading splat:", error);
-      throw error;
-    } finally {
-      setUploadingSplat(false);
-    }
-  };
-
-  const handleSplatSelection = (splat) => {
-    onSplatSelection(splat);
-  };
-
-  const deleteSplat = async (splatId) => {
-    if (!window.confirm("Are you sure you want to delete this splat?")) return;
-
-    try {
-      const splatToDelete = nearbySplats.find(splat => splat.id === splatId);
-
-      // Delete from Firebase Storage if it's a Firebase URL
-      if (splatToDelete.url.includes('firebasestorage.googleapis.com')) {
-        try {
-          const fileRef = ref(storage, splatToDelete.url);
-          await deleteObject(fileRef);
-        } catch (storageError) {
-          console.error("Error deleting from storage:", storageError);
-        }
-      }
-
-      // Delete from Firestore
-      await deleteDoc(doc(db, 'splats', splatId));
-
-      // Update local state
-      const updatedSplats = nearbySplats.filter(splat => splat.id !== splatId);
-      setNearbySplats(updatedSplats);
-      
-      // Notify parent component about the deleted splat
-      if (onSplatListUpdate) {
-        onSplatListUpdate(updatedSplats);
-      }
-
-      // If the deleted splat was selected, deselect it
-      if (selectedSplat && selectedSplat.id === splatId) {
-        onSplatSelection(null);
-      }
-
-    } catch (error) {
-      console.error("Error deleting splat:", error);
-      alert("Failed to delete splat. Please try again.");
-    }
-  };
-
-  return (
-    <>
-      <div className="absolute top-5 right-5 z-10 bg-white p-5 rounded-xl shadow-xl w-96 h-[90vh] flex flex-col">
-        <div className="flex justify-between items-center mb-4 pb-3 border-b border-gray-100">
-          <h2 className="font-medium text-gray-800">
-            <span className="text-sm text-gray-500">Nearby Splats</span><br />
-            {nearbySplats.length} found
-          </h2>
-          <button
-            className="bg-blue-500 hover:bg-blue-600 text-white rounded-md px-3 py-2 text-sm transition-colors duration-200"
-            onClick={() => setIsUploadModalOpen(true)}
-            disabled={uploadingSplat}
-          >
-            {uploadingSplat ? 'Uploading...' : 'Upload Splat'}
-          </button>
-        </div>
-
-        <div className="flex-grow overflow-y-auto pr-1 space-y-3">
-          {nearbySplats.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-gray-400 text-center">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 22V12h6v10" />
-              </svg>
-              <p>No splats found nearby.<br />Upload a splat file to view 3D content.</p>
-            </div>
-          ) : (
-            nearbySplats.map((splat) => (
-              <div
-                key={splat.id}
-                className={`p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors ${selectedSplat && selectedSplat.id === splat.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
-                  }`}
-                onClick={() => handleSplatSelection(splat)}
-              >
-                <div className="flex justify-between items-center">
-                  <div>
-                    <div className="font-medium text-sm">{splat.name || `Splat ${splat.id}`}</div>
-                    <div className="text-xs text-gray-500">
-                      {new Date(splat.createdAt).toLocaleDateString()}
-                    </div>
-                    <div className="text-xs text-gray-500">
-                      Lat: {splat.coordinates?.lat.toFixed(4)}, Lng: {splat.coordinates?.lng.toFixed(4)}
-                    </div>
-                  </div>
-                  <div className="flex items-center">
-                    {selectedSplat && selectedSplat.id === splat.id && (
-                      <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-md mr-2">
-                        Selected
-                      </span>
-                    )}
-                    <button
-                      className="text-red-500 hover:text-red-700 bg-white rounded-full p-1 hover:bg-red-50 transition-colors"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        deleteSplat(splat.id);
-                      }}
-                      title="Delete Splat"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-
-      <UploadModal
-        isOpen={isUploadModalOpen}
-        onClose={() => setIsUploadModalOpen(false)}
-        onUpload={handleUploadSplat}
-        playerPosition={playerPosition}
-      />
-    </>
   );
 };
 
@@ -774,217 +547,6 @@ const SplatModel = React.memo(({ splatData, cameraPosition, isSelected, showBoun
   );
 });
 
-const UploadModal = ({
-  isOpen,
-  onClose,
-  onUpload,
-  playerPosition
-}) => {
-  const [splatFile, setSplatFile] = useState(null);
-  const [imageFile, setImageFile] = useState(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [useImageGps, setUseImageGps] = useState(false);
-  const [coordinates, setCoordinates] = useState(playerPosition);
-  const [extractingCoordinates, setExtractingCoordinates] = useState(false);
-  const [teleportAfterUpload, setTeleportAfterUpload] = useState(true);
-
-  const splatFileRef = useRef(null);
-  const imageFileRef = useRef(null);
-
-  // Update coordinates when player position changes (if using current position)
-  useEffect(() => {
-    if (!useImageGps) {
-      setCoordinates(playerPosition);
-    }
-  }, [playerPosition, useImageGps]);
-
-  const handleSplatFileSelect = (e) => {
-    if (e.target.files.length > 0) {
-      setSplatFile(e.target.files[0]);
-    }
-  };
-
-  const handleImageFileSelect = async (e) => {
-    if (e.target.files.length > 0) {
-      setImageFile(e.target.files[0]);
-
-      if (useImageGps) {
-        try {
-          setExtractingCoordinates(true);
-          setError(null);
-          const gpsData = await Utils.extractGpsFromExif(e.target.files[0]);
-          setCoordinates(gpsData);
-          setExtractingCoordinates(false);
-        } catch (err) {
-          setExtractingCoordinates(false);
-          setError("Could not extract GPS data from image. Using current position instead.");
-          console.error("EXIF extraction error:", err);
-          setUseImageGps(false);
-          setCoordinates(playerPosition);
-        }
-      }
-    }
-  };
-
-  const toggleUseImageGps = (value) => {
-    setUseImageGps(value);
-
-    // Reset to player position if switching to current position
-    if (!value) {
-      setCoordinates(playerPosition);
-    } else if (imageFile) {
-      // Try to extract GPS from image if already selected
-      setExtractingCoordinates(true);
-      Utils.extractGpsFromExif(imageFile)
-        .then(gpsData => {
-          setCoordinates(gpsData);
-          setExtractingCoordinates(false);
-        })
-        .catch(() => {
-          setError("Could not extract GPS data from image. Using current position instead.");
-          setUseImageGps(false);
-          setCoordinates(playerPosition);
-          setExtractingCoordinates(false);
-        });
-    }
-  };
-
-  const handleUpload = async () => {
-    if (!splatFile) {
-      setError("Please select a splat file to upload");
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      await onUpload(splatFile, coordinates, teleportAfterUpload);
-      onClose();
-    } catch (err) {
-      setError(`Upload failed: ${err.message}`);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  if (!isOpen) return null;
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-md">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-bold">Upload Splat</h2>
-          <button
-            onClick={onClose}
-            className="text-gray-500 hover:text-gray-700"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-
-        {error && (
-          <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-md text-sm">
-            {error}
-          </div>
-        )}
-
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-1">Splat File</label>
-          <div className="flex items-center">
-            <button
-              onClick={() => splatFileRef.current.click()}
-              className="bg-blue-50 border border-blue-300 rounded px-4 py-2 text-sm hover:bg-blue-100"
-            >
-              Select File
-            </button>
-            <span className="ml-3 text-sm text-gray-500">
-              {splatFile ? splatFile.name : 'No file selected'}
-            </span>
-            <input
-              ref={splatFileRef}
-              type="file"
-              accept=".splat"
-              onChange={handleSplatFileSelect}
-              className="hidden"
-            />
-          </div>
-        </div>
-
-        <div className="mb-4">
-          <label className="flex items-center">
-            <input
-              type="checkbox"
-              checked={useImageGps}
-              onChange={(e) => toggleUseImageGps(e.target.checked)}
-              className="form-checkbox h-4 w-4 text-blue-600"
-            />
-            <span className="ml-2 text-sm text-gray-700">Extract GPS from image</span>
-          </label>
-
-          {useImageGps && (
-            <div className="mt-2">
-              <div className="flex items-center">
-                <button
-                  onClick={() => imageFileRef.current.click()}
-                  className="bg-green-50 border border-green-300 rounded px-4 py-2 text-sm hover:bg-green-100"
-                  disabled={extractingCoordinates}
-                >
-                  {extractingCoordinates ? 'Extracting GPS...' : 'Select Image'}
-                </button>
-                <span className="ml-3 text-sm text-gray-500">
-                  {imageFile ? imageFile.name : 'No image selected'}
-                </span>
-                <input
-                  ref={imageFileRef}
-                  type="file"
-                  accept="image/jpeg,image/jpg"
-                  onChange={handleImageFileSelect}
-                  className="hidden"
-                />
-              </div>
-              <p className="mt-1 text-xs text-gray-500">
-                Only JPEG images with embedded GPS data are supported
-              </p>
-            </div>
-          )}
-        </div>
-
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
-          <div className="bg-gray-50 border border-gray-200 rounded p-3 text-xs font-mono">
-            <div>Using: {useImageGps ? 'Image GPS data' : 'Current position'}</div>
-            <div>Lat: {coordinates.lat.toFixed(6)}, Lng: {coordinates.lng.toFixed(6)}</div>
-          </div>
-        </div>
-
-        <div className="mb-4">
-          <label className="flex items-center">
-            <input
-              type="checkbox"
-              checked={teleportAfterUpload}
-              onChange={(e) => setTeleportAfterUpload(e.target.checked)}
-              className="form-checkbox h-4 w-4 text-blue-600"
-            />
-            <span className="ml-2 text-sm text-gray-700">Teleport to splat after upload</span>
-          </label>
-        </div>
-
-        <div className="flex justify-end mt-6">
-          <button
-            onClick={handleUpload}
-            className="px-4 py-2 bg-blue-600 text-white rounded shadow-sm text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
-            disabled={!splatFile || isLoading}
-          >
-            {isLoading ? 'Uploading...' : 'Upload Splat'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-};
-
 // Add a BoundaryControls component to the App component
 const BoundaryControls = ({ showBoundaries, setShowBoundaries }) => {
   return (
@@ -1031,10 +593,15 @@ const App = () => {
     const fetchSplats = async () => {
       try {
         const splatsSnapshot = await getDocs(collection(db, 'splats'));
-        const splatsData = splatsSnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
+        const splatsData = splatsSnapshot.docs.map(doc => {
+          const data = doc.data();
+          // Ensure hidden property is defined (default to false)
+          return {
+            id: doc.id,
+            ...data,
+            hidden: data.hidden !== undefined ? data.hidden : false
+          };
+        });
 
         setAllSplats(splatsData.map(splat => {
           if (selectedSplat && splat.id === selectedSplat.id && selectedSplat._editing) {
@@ -1044,6 +611,7 @@ const App = () => {
               rotation: selectedSplat.rotation,
               scale: selectedSplat.scale,
               coordinates: selectedSplat.coordinates,
+              hidden: selectedSplat.hidden,
               _editing: true
             };
           }
@@ -1122,20 +690,48 @@ const App = () => {
 
   // Add this new function to handle splat list updates from SplatManager
   const handleSplatListUpdate = (updatedSplats) => {
+    // Always use the full updated list from the SplatManager
+    // since it has the most recent state including hidden changes
     setAllSplats(updatedSplats);
+    
+    // If the currently selected splat was updated, reflect those changes
+    if (selectedSplat) {
+      const updatedSelectedSplat = updatedSplats.find(splat => splat.id === selectedSplat.id);
+      if (updatedSelectedSplat) {
+        setSelectedSplat({
+          ...updatedSelectedSplat,
+          _editing: selectedSplat._editing
+        });
+      }
+    }
   };
 
   const handleModelChange = (type, value, index) => {
     if (!selectedSplat) return;
 
-    // Create the updated splat object
+    // Create the updated splat object with the new value
     const updatedSplat = {
       ...selectedSplat,
-      _editing: true,
-      [type]: type === 'scale'
-        ? [value, value, value]
-        : selectedSplat[type].map((v, i) => (i === index ? value : v))
+      _editing: true
     };
+    
+    // Handle different property types
+    if (type === 'scale') {
+      // Scale is handled as a uniform value
+      updatedSplat.scale = [value, value, value];
+    } else if (type === 'hidden') {
+      // Visibility toggle - direct boolean value
+      updatedSplat.hidden = value;
+    } else if (type === 'coordinates') {
+      // Coordinates are an object with lat/lng
+      updatedSplat.coordinates = value;
+    } else if (Array.isArray(selectedSplat[type])) {
+      // For array properties (position, rotation) update a specific index
+      updatedSplat[type] = selectedSplat[type].map((v, i) => (i === index ? value : v));
+    } else {
+      // For other properties, just set the value directly
+      updatedSplat[type] = value;
+    }
 
     // Update both states in one batch to prevent flickering
     const updatedAllSplats = allSplats.map(splat =>
@@ -1148,22 +744,9 @@ const App = () => {
 
   const handleCoordinateChange = (lat, lng) => {
     if (!selectedSplat) return;
-
-    // Create a copy of the selected splat with updated coordinates
-    // but DO NOT modify the position values
-    const updatedSplat = {
-      ...selectedSplat,
-      _editing: true,
-      coordinates: { lat, lng }
-    };
     
-    // Update both states in one batch to prevent flickering
-    const updatedAllSplats = allSplats.map(splat =>
-      splat.id === selectedSplat.id ? updatedSplat : splat
-    );
-
-    setSelectedSplat(updatedSplat);
-    setAllSplats(updatedAllSplats);
+    // Use the unified model change function with coordinates
+    handleModelChange('coordinates', { lat, lng });
   };
 
   const handleSavePosition = async () => {
@@ -1173,12 +756,13 @@ const App = () => {
     try {
       const { _editing, ...splatToSave } = selectedSplat;
 
-      // Update in Firestore
+      // Update in Firestore with all the editable properties
       await updateDoc(doc(db, 'splats', selectedSplat.id), {
         position: selectedSplat.position,
         rotation: selectedSplat.rotation,
         scale: selectedSplat.scale,
         coordinates: selectedSplat.coordinates,
+        hidden: selectedSplat.hidden,
         updatedAt: new Date().toISOString()
       });
 
@@ -1291,13 +875,29 @@ const App = () => {
         selectedSplat={selectedSplat}
         onTeleport={teleportToLocation}
         onSplatListUpdate={handleSplatListUpdate}
+        onUpdateSplatProperty={handleModelChange}
       />
 
       {selectedSplat && (
         <div className="absolute top-10 left-10 z-10 bg-white p-4 rounded shadow-lg flex flex-col gap-4">
           <h3 className="font-medium">{selectedSplat.name}</h3>
 
-          {/* Add coordinate controls */}
+          {/* Add toggle for visibility */}
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-gray-700">Visibility</span>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                className="sr-only peer"
+                checked={!selectedSplat.hidden}
+                onChange={(e) => handleModelChange('hidden', !e.target.checked)}
+              />
+              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+              <span className="ml-2 text-sm font-medium text-gray-700">{selectedSplat.hidden ? 'Hidden' : 'Visible'}</span>
+            </label>
+          </div>
+
+          {/* Existing coordinate controls */}
           <div className="space-y-2">
             <h4 className="text-sm font-medium text-gray-700">Coordinates</h4>
             <div className="grid grid-cols-2 gap-2">
@@ -1324,7 +924,7 @@ const App = () => {
             </div>
             <button
               className="w-full px-2 py-1 text-xs bg-blue-50 text-blue-600 rounded hover:bg-blue-100"
-              onClick={() => handleCoordinateChange(playerPosition.lat, playerPosition.lng)}
+              onClick={() => handleModelChange('coordinates', { lat: playerPosition.lat, lng: playerPosition.lng })}
             >
               Use Current Position
             </button>
@@ -1414,6 +1014,9 @@ const App = () => {
 
           // Check if this splat is currently selected
           const isSelected = selectedSplat && selectedSplat.id === splat.id;
+
+          // Skip rendering if splat is marked as hidden
+          if (splat.hidden) return null;
 
           return (
             <Suspense key={splat.id} fallback={null}>

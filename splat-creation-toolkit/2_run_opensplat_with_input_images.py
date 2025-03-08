@@ -7,7 +7,7 @@ def main():
         dataset_path = "colmap_output"
         run_opensplat_pipeline(
             dataset_path=dataset_path,
-            num_points=1100
+            num_points=6000
         )
         print("Successfully ran OpenSplat pipeline")
         
