@@ -13,123 +13,25 @@ import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader';
 import EXIF from 'exif-js';
 import { Skybox, SkyWithSun } from '../components/SkyComponents';
 import { SplatManager } from '../components/SplatManager';
+import Minimap from '../components/Minimap';
+import MapUtils from '../utils/MapUtils';
 
 
 
 //Config module 
 const Config = { API_KEY: '5bpPlOMeEXIFV9UuKHrW', CHUNK_SIZE: 10, 
   INITIAL_POSITION: { lat: 33.80358961071113, lng: 10.951546694824309 }, ZOOM_LEVEL: 20, 
-VOID_MODE: true, SHOW_BOUNDARIES: false };
+VOID_MODE: false, SHOW_BOUNDARIES: false };
 
 
-// Utilities module
-const Utils = {
-  fetchTileData: async ({ zoom, x, y }) => ({
-    texture: await new TextureLoader().loadAsync(`https://api.maptiler.com/maps/hybrid/${zoom}/${x}/${y}.jpg?key=${Config.API_KEY}`)
-  }),
-
-  latLngToTileNumber: ({ lat, lng }, zoom) => {
-    const n = 2 ** zoom;
-    return { x: Math.floor(n * ((lng + 180) / 360)), y: Math.floor(n * (1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2), zoom };
-  },
-
-  tileNumberToLatLng: ({ x, y }, zoom) => {
-    const n = 2 ** zoom;
-    const lon = (x / n) * 360 - 180;
-    const lat = Math.atan(Math.sinh(Math.PI * (1 - 2 * y / n))) * 180 / Math.PI;
-    return { lat, lng: lon };
-  },
-
-  
-
-  extractGpsFromExif: (imageFile) => {
-    return new Promise((resolve, reject) => {
-      EXIF.getData(imageFile, function () {
-        try {
-          // Check if GPS data exists
-          if (!EXIF.getTag(this, "GPSLatitude") || !EXIF.getTag(this, "GPSLongitude")) {
-            return reject(new Error("No GPS data found in image"));
-          }
-
-          // Get the GPS data
-          const latArray = EXIF.getTag(this, "GPSLatitude");
-          const lngArray = EXIF.getTag(this, "GPSLongitude");
-          const latRef = EXIF.getTag(this, "GPSLatitudeRef") || "N";
-          const lngRef = EXIF.getTag(this, "GPSLongitudeRef") || "E";
-
-          if (!latArray || !lngArray) {
-            return reject(new Error("Invalid GPS data format"));
-          }
-
-          // Convert to decimal degrees
-          const latDecimal = latArray[0] + latArray[1] / 60 + latArray[2] / 3600;
-          const lngDecimal = lngArray[0] + lngArray[1] / 60 + lngArray[2] / 3600;
-
-          // Apply reference (N/S, E/W)
-          const lat = (latRef === "N") ? latDecimal : -latDecimal;
-          const lng = (lngRef === "E") ? lngDecimal : -lngDecimal;
-
-          resolve({ lat, lng });
-        } catch (err) {
-          console.error("Error parsing EXIF data:", err);
-          reject(new Error("Error parsing EXIF data"));
-        }
-      });
-    });
-  },
-
-  localPositionToGps: (x, z, refLat, refLng) => {
-    // Earth's radius in meters
-    const R = 6371000;
-    
-    // Convert reference lat/lng to radians
-    const refLatRad = refLat * (Math.PI / 180);
-    const refLngRad = refLng * (Math.PI / 180);
-    
-    // Calculate angular distance (in radians)
-    // No scaling factor here - use actual distance
-    const dLat = z / R;  // north-south movement
-    const dLng = x / (R * Math.cos(refLatRad));  // east-west movement
-    
-    // Calculate new coordinates
-    const newLat = refLat + dLat * (180 / Math.PI);
-    const newLng = refLng + dLng * (180 / Math.PI);
-    
-    return { lat: newLat, lng: newLng };
-  },
-  
-  // New utility function to convert from local position back to GPS coordinates
-  gpsToLocalPosition: (lat, lng, refLat, refLng) => {
-    // Earth's radius in meters
-    const R = 6371000;
-    
-    // Convert to radians
-    const latRad = lat * (Math.PI / 180);
-    const lngRad = lng * (Math.PI / 180);
-    const refLatRad = refLat * (Math.PI / 180);
-    const refLngRad = refLng * (Math.PI / 180);
-    
-    // Calculate differences
-    const dLat = latRad - refLatRad;
-    const dLng = lngRad - refLngRad;
-    
-    // Convert to meters
-    // For latitude: 1 radian ≈ Earth's radius in meters
-    const z = dLat * R;  // north-south distance
-    
-    // For longitude: need to account for the cosine of latitude
-    const x = dLng * R * Math.cos(refLatRad);  // east-west distance
-    
-    return { x, z };
-  }
-};
+// Utils module removed and replaced with import from MapUtils
 
 // Convert Components object members to individual React components
 
-const Cube = forwardRef(({ onMove, camera, isPointerLocked }, ref) => {
+const Cube = forwardRef(({ onMove, camera, isPointerLocked, isCameraControlActive, isClickingScene }, ref) => {
   const velocity = useVelocity(isPointerLocked, onMove);
   useFrame(() => {
-    if (ref.current && isPointerLocked) {
+    if (ref.current && isPointerLocked && (isCameraControlActive || isClickingScene)) {
       const direction = new Vector3().copy(camera.getWorldDirection(new Vector3())).setY(0).normalize();
       ref.current.position.addScaledVector(direction, velocity.current.z);
       ref.current.position.addScaledVector(new Vector3(-direction.z, 0, direction.x), velocity.current.x);
@@ -243,11 +145,11 @@ const Slider = ({ label, value, onChange, min, max, step }) => {
   );
 };
 
-const SceneController = ({ onMove, onRotate, onCameraMove, isPointerLocked, isClickingScene }) => {
+const SceneController = ({ onMove, onRotate, onCameraMove, isPointerLocked, isClickingScene, isCameraControlActive }) => {
   const cubeRef = useRef();
   const { camera } = useThree();
 
-  useCameraController(cubeRef, isPointerLocked && isClickingScene);
+  useCameraController(cubeRef, isPointerLocked && (isCameraControlActive || isClickingScene));
 
   useFrame(() => {
     if (isPointerLocked) {
@@ -271,7 +173,7 @@ const SceneController = ({ onMove, onRotate, onCameraMove, isPointerLocked, isCl
     }
   });
 
-  return <Cube ref={cubeRef} onMove={onMove} camera={camera} isPointerLocked={isPointerLocked} />;
+  return <Cube ref={cubeRef} onMove={onMove} camera={camera} isPointerLocked={isPointerLocked} isCameraControlActive={isCameraControlActive} isClickingScene={isClickingScene} />;
 };
 
 const SplatModel = React.memo(({ splatData, cameraPosition, isSelected, showBoundary }) => {
@@ -582,6 +484,7 @@ const App = () => {
   const [allSplats, setAllSplats] = useState([]);
   const [selectedSplat, setSelectedSplat] = useState(null);
   const [isClickingScene, setIsClickingScene] = useState(false);
+  const [isCameraControlActive, setIsCameraControlActive] = useState(false);
   const [cameraPosition, setCameraPosition] = useState({ x: 0, y: 0, z: 0 });
   const [cubeLocalPosition, setCubeLocalPosition] = useState({ x: 0, z: 0 });
   const [showBoundaries, setShowBoundaries] = useState(Config.SHOW_BOUNDARIES);
@@ -635,8 +538,8 @@ const App = () => {
       fetchedPlatforms.current.add(pos);
 
       const [chunkX, chunkZ] = pos.split(',').map(Number);
-      const tile = Utils.latLngToTileNumber(Config.INITIAL_POSITION, Config.ZOOM_LEVEL);
-      const tileData = await Utils.fetchTileData({ zoom: Config.ZOOM_LEVEL, x: tile.x + chunkX, y: tile.y + chunkZ });
+      const tile = MapUtils.latLngToTileNumber(Config.INITIAL_POSITION, Config.ZOOM_LEVEL);
+      const tileData = await MapUtils.fetchTileData({ zoom: Config.ZOOM_LEVEL, x: tile.x + chunkX, y: tile.y + chunkZ }, Config.API_KEY);
       
       // Simply store the tile data without any chunk information
       setData(prev => ({ ...prev, [pos]: tileData }));
@@ -647,7 +550,13 @@ const App = () => {
 
     // Handle pointer lock
     const handlePointerLockChange = () => {
-      setIsPointerLocked(document.pointerLockElement !== null);
+      const isLocked = document.pointerLockElement !== null;
+      setIsPointerLocked(isLocked);
+      
+      // If pointer lock is lost unexpectedly and camera control was active, turn it off
+      if (!isLocked && isCameraControlActive) {
+        setIsCameraControlActive(false);
+      }
     };
 
     document.addEventListener('pointerlockchange', handlePointerLockChange);
@@ -660,7 +569,7 @@ const App = () => {
     
     // Convert cube's 3D position to GPS coordinates
     // using INITIAL_POSITION as the reference point
-    const { lat, lng } = Utils.localPositionToGps(
+    const { lat, lng } = MapUtils.localPositionToGps(
       x, 
       z, 
       Config.INITIAL_POSITION.lat, 
@@ -673,7 +582,7 @@ const App = () => {
     // Calculate chunks for loading map tiles
     const chunkX = Math.floor((x + Config.CHUNK_SIZE / 2) / Config.CHUNK_SIZE);
     const chunkZ = Math.floor((z + Config.CHUNK_SIZE / 2) / Config.CHUNK_SIZE);
-    const tile = Utils.latLngToTileNumber(Config.INITIAL_POSITION, Config.ZOOM_LEVEL);
+    const tile = MapUtils.latLngToTileNumber(Config.INITIAL_POSITION, Config.ZOOM_LEVEL);
     const newChunk = `${tile.x + chunkX}_${tile.y + chunkZ}`;
     
     setCurrentChunk(newChunk);
@@ -786,7 +695,7 @@ const App = () => {
     setPlayerPosition(coordinates);
     
     // Convert GPS coordinates to local 3D position
-    const localPosition = Utils.gpsToLocalPosition(
+    const localPosition = MapUtils.gpsToLocalPosition(
       coordinates.lat,
       coordinates.lng,
       Config.INITIAL_POSITION.lat,
@@ -802,7 +711,7 @@ const App = () => {
     // Calculate chunks for loading map tiles
     const chunkX = Math.floor((localPosition.x + Config.CHUNK_SIZE / 2) / Config.CHUNK_SIZE);
     const chunkZ = Math.floor((localPosition.z + Config.CHUNK_SIZE / 2) / Config.CHUNK_SIZE);
-    const tile = Utils.latLngToTileNumber(Config.INITIAL_POSITION, Config.ZOOM_LEVEL);
+    const tile = MapUtils.latLngToTileNumber(Config.INITIAL_POSITION, Config.ZOOM_LEVEL);
     const newChunk = `${tile.x + chunkX}_${tile.y + chunkZ}`;
     
     setCurrentChunk(newChunk);
@@ -823,14 +732,41 @@ const App = () => {
 
   // Add these handlers
   const handleSceneMouseDown = (e) => {
-    // Only set clicking if the click was on the canvas
+    // Handle right click for toggling camera control
+    if (e.button === 2) { // Right mouse button
+      e.preventDefault();
+      const newControlState = !isCameraControlActive;
+      setIsCameraControlActive(newControlState);
+      
+      // When toggling camera control on, request pointer lock
+      if (newControlState) {
+        // Request pointer lock when activating camera control
+        e.target.requestPointerLock();
+      } else {
+        // Exit pointer lock when deactivating camera control
+        if (document.pointerLockElement) {
+          document.exitPointerLock();
+        }
+      }
+      return;
+    }
+    
+    // For left click, maintain the existing behavior
     if (e.target.tagName === 'CANVAS') {
       setIsClickingScene(true);
+      // Request pointer lock for the traditional click-and-drag mode
+      if (!document.pointerLockElement) {
+        e.target.requestPointerLock();
+      }
     }
   };
 
   const handleSceneMouseUp = () => {
     setIsClickingScene(false);
+    // Only exit pointer lock if camera control is not active
+    if (!isCameraControlActive && document.pointerLockElement) {
+      document.exitPointerLock();
+    }
   };
 
   // Update camera position in SceneController
@@ -850,8 +786,23 @@ const App = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
+  // Add a contextmenu handler to prevent the default browser menu
+  const handleContextMenu = (e) => {
+    e.preventDefault();
+  };
+
   return (
     <div className="relative flex">
+      {/* Camera Control Mode Indicator */}
+      <div className="absolute top-4 right-4 z-20 bg-black bg-opacity-70 p-2 rounded-lg shadow-md text-white text-sm">
+        <div>
+          <div>Camera Control: {isCameraControlActive ? "Active" : "Inactive"}</div>
+          <div>Pointer Lock: {isPointerLocked ? "Active" : "Inactive"}</div>
+          <div className="text-xs text-gray-400 mt-1">Right-click to toggle camera control</div>
+          <div className="text-xs text-gray-400">ESC to exit camera control</div>
+        </div>
+      </div>
+      
       {/* Geo Location Display with added local position and chunk */}
       <div className="absolute top-10 left-[500px] z-20 bg-white bg-opacity-80 p-3 rounded-lg shadow-md">
         <h3 className="text-sm font-semibold text-gray-700 mb-1">Current Location</h3>
@@ -966,11 +917,28 @@ const App = () => {
         setShowBoundaries={setShowBoundaries} 
       />
 
+      {/* Add the minimap component - now using the imported version */}
+      <Minimap 
+        currentChunk={currentChunk}
+        platforms={platforms}
+        playerPosition={{ 
+          x: cubeLocalPosition.x, 
+          z: cubeLocalPosition.z 
+        }}
+        data={data}
+        chunkSize={Config.CHUNK_SIZE}
+        playerDirection={playerDirection}
+      />
+
       <Canvas
-        camera={{ fov: 70 }}
+        shadows
+        dpr={[1, 1.5]}
+        className={isPointerLocked ? 'cursor-none' : ''}
+        camera={{ position: [0, 2, 0], fov: 50 }}
         style={{ width: '100vw', height: '100vh' }}
         onMouseDown={handleSceneMouseDown}
         onMouseUp={handleSceneMouseUp}
+        onContextMenu={handleContextMenu}
       >
         {Config.VOID_MODE && <color attach="background" args={['#001122']} />}
         <SceneController
@@ -979,6 +947,7 @@ const App = () => {
           onCameraMove={handleCameraMove}
           isPointerLocked={isPointerLocked}
           isClickingScene={isClickingScene}
+          isCameraControlActive={isCameraControlActive}
         />
         
         {/* Render ground tiles */}
@@ -998,7 +967,7 @@ const App = () => {
           if (!splat.coordinates) return null;
           
           // Convert GPS coordinates to local 3D position
-          const localPos = Utils.gpsToLocalPosition(
+          const localPos = MapUtils.gpsToLocalPosition(
             splat.coordinates.lat,
             splat.coordinates.lng,
             Config.INITIAL_POSITION.lat,
@@ -1039,7 +1008,6 @@ const App = () => {
           );
         })}
 
-        {!Config.VOID_MODE && <Skybox hdrPath="/assets/images/sky.hdr" />}
         {Config.VOID_MODE && <SkyWithSun />}
         <directionalLight position={[10, 10, 10]} intensity={1.0} />
         <pointLight position={[0, 10, 0]} intensity={1.5} />

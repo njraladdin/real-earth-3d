@@ -1,44 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import EXIF from 'exif-js';
-
-// Importing Utils for GPS extraction
-const Utils = {
-  extractGpsFromExif: (imageFile) => {
-    return new Promise((resolve, reject) => {
-      EXIF.getData(imageFile, function () {
-        try {
-          // Check if GPS data exists
-          if (!EXIF.getTag(this, "GPSLatitude") || !EXIF.getTag(this, "GPSLongitude")) {
-            return reject(new Error("No GPS data found in image"));
-          }
-
-          // Get the GPS data
-          const latArray = EXIF.getTag(this, "GPSLatitude");
-          const lngArray = EXIF.getTag(this, "GPSLongitude");
-          const latRef = EXIF.getTag(this, "GPSLatitudeRef") || "N";
-          const lngRef = EXIF.getTag(this, "GPSLongitudeRef") || "E";
-
-          if (!latArray || !lngArray) {
-            return reject(new Error("Invalid GPS data format"));
-          }
-
-          // Convert to decimal degrees
-          const latDecimal = latArray[0] + latArray[1] / 60 + latArray[2] / 3600;
-          const lngDecimal = lngArray[0] + lngArray[1] / 60 + lngArray[2] / 3600;
-
-          // Apply reference (N/S, E/W)
-          const lat = (latRef === "N") ? latDecimal : -latDecimal;
-          const lng = (lngRef === "E") ? lngDecimal : -lngDecimal;
-
-          resolve({ lat, lng });
-        } catch (err) {
-          console.error("Error parsing EXIF data:", err);
-          reject(new Error("Error parsing EXIF data"));
-        }
-      });
-    });
-  }
-};
+import MapUtils from '../utils/MapUtils';
 
 export const UploadModal = ({
   isOpen,
@@ -79,7 +40,7 @@ export const UploadModal = ({
         try {
           setExtractingCoordinates(true);
           setError(null);
-          const gpsData = await Utils.extractGpsFromExif(e.target.files[0]);
+          const gpsData = await MapUtils.extractGpsFromExif(e.target.files[0]);
           setCoordinates(gpsData);
           setExtractingCoordinates(false);
         } catch (err) {
@@ -102,7 +63,7 @@ export const UploadModal = ({
     } else if (imageFile) {
       // Try to extract GPS from image if already selected
       setExtractingCoordinates(true);
-      Utils.extractGpsFromExif(imageFile)
+      MapUtils.extractGpsFromExif(imageFile)
         .then(gpsData => {
           setCoordinates(gpsData);
           setExtractingCoordinates(false);

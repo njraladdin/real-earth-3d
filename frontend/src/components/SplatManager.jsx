@@ -214,36 +214,43 @@ export const SplatManager = ({
         return;
       }
       
-      // Determine the new state (default to false if hidden is undefined)
-      const newHiddenState = !(splatToToggle.hidden || false);
+      // Determine the new state - explicitly convert current value to boolean
+      // This fixes issues where hidden might be undefined, null, or a non-boolean value
+      const currentHiddenState = Boolean(splatToToggle.hidden);
+      const newHiddenState = !currentHiddenState;
       
-      // Update in Firestore - do this first to ensure it's committed
+      console.log(`Toggling splat ${splatId} visibility from ${currentHiddenState} to ${newHiddenState}`);
+      
+      // Update in Firestore
       await updateDoc(doc(db, 'splats', splatId), {
         hidden: newHiddenState,
         updatedAt: new Date().toISOString()
       });
       
-      console.log(`Updated splat ${splatId} hidden state to ${newHiddenState} in Firestore`);
-
-      // Check if the toggled splat is the selected one
-      if (selectedSplat && selectedSplat.id === splatId) {
-        // Use the provided function to update the selected splat
-        onUpdateSplatProperty('hidden', newHiddenState);
-      } else {
-        // If it's not the selected splat, just update the list
-        const updatedSplat = { ...splatToToggle, hidden: newHiddenState };
-        
-        // Update local state
-        const updatedSplats = nearbySplats.map(splat => 
-          splat.id === splatId ? updatedSplat : splat
-        );
-        setNearbySplats(updatedSplats);
-        
-        // Notify parent component with updated splats
-        if (onSplatListUpdate) {
-          onSplatListUpdate(updatedSplats);
-        }
+      // Create updated splat object
+      const updatedSplat = { 
+        ...splatToToggle, 
+        hidden: newHiddenState 
+      };
+      
+      // Always update local state to ensure UI reflects current state
+      const updatedSplats = nearbySplats.map(splat => 
+        splat.id === splatId ? updatedSplat : splat
+      );
+      
+      // Update local state
+      setNearbySplats(updatedSplats);
+      
+      // Notify parent component with updated splats
+      if (onSplatListUpdate) {
+        onSplatListUpdate(updatedSplats);
       }
+      
+      // If this is the selected splat, update the selection too
+      if (selectedSplat && selectedSplat.id === splatId) {
+        onUpdateSplatProperty('hidden', newHiddenState);
+      }
+      
     } catch (error) {
       console.error("Error toggling splat visibility:", error);
       alert("Failed to update splat visibility. Please try again.");
@@ -400,8 +407,8 @@ export const SplatManager = ({
               >
                 <div className="flex justify-between items-start">
                   <div className="flex-1 min-w-0 mr-3">
-                    <div className="font-medium text-sm overflow-hidden" title={splat.name || `Splat ${splat.id}`}>
-                      <span className="block truncate">{splat.name || `Splat ${splat.id}`}</span>
+                    <div className="font-medium text-sm mb-1" title={splat.name || `Splat ${splat.id}`}>
+                      <span className="block break-words">{splat.name || `Splat ${splat.id}`}</span>
                     </div>
                     <div className="text-xs text-gray-500">
                       {new Date(splat.createdAt).toLocaleDateString()}
@@ -511,6 +518,7 @@ const ReplaceModal = ({ isOpen, onClose, originalSplat, onReplace }) => {
     if (!isOpen) {
       setNewSplatFile(null);
       setError(null);
+      setIsLoading(false); // Reset loading state when modal closes
     }
   }, [isOpen]);
 
@@ -530,10 +538,10 @@ const ReplaceModal = ({ isOpen, onClose, originalSplat, onReplace }) => {
       setIsLoading(true);
       setError(null);
       await onReplace(newSplatFile, originalSplat);
-      onClose();
+      // Don't need to call onClose() here as it's handled in the processSplatReplacement function
     } catch (err) {
       setError(`Failed to replace splat: ${err.message}`);
-      setIsLoading(false);
+      setIsLoading(false); // Only reset loading on error here
     }
   };
 

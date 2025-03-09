@@ -56,16 +56,21 @@ fix frontend:
 -> open areas work best. avoid tight corridors / inside buildings 
 -> adjust splat in superspl.at. trim until you leave only robust objects 
 -> don't scan randomly, just follow walkable areas 
-
+-> walking spots scan around 5-7 meters around you. 
+-> each splat shouldn't include any other object from another splat
 TODO :
 - scan a few areas, clean them up and add them, done 
 - deploy, done 
 
 - try compressing images, see difference in performance in colmap / opensplat (run same 500 iamges, can you run 5000 opensplat steps now?): not much difference, done 
+- be able to download / update a splat fil, done 
+ -try only trim splats form the parts where it would connect with another splat (the start and end of road) : messy, splats together don't look good., done 
 
 
-- be able to download / update a splat file. only trim splats form the parts where it would connect with another splat (the start and end of road) 
-- boundaries render order: fix calculating nearest object (simplfy : thge splat we're currently in has the highest render order, or fixing the center distance)
+
+- cover full field next home 
+- cover full jnen  
+- cover full cemetry 
 - cover road from dar until ayyad castle (road + historical monument)
 
 FUTURE TODOS:
@@ -76,5 +81,6 @@ FUTURE TODOS:
 - add intro animation 
 - add clear movement control  
 - don't load all splats at once 
+
 
 
