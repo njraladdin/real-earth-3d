@@ -15,7 +15,7 @@ import { Skybox, SkyWithSun } from '../components/SkyComponents';
 import { SplatManager } from '../components/SplatManager';
 import Minimap from '../components/Minimap';
 import MapUtils from '../utils/MapUtils';
-import { FaArrowsAlt, FaMousePointer, FaEye } from 'react-icons/fa';
+import { FaArrowsAlt, FaMousePointer, FaEye, FaPause } from 'react-icons/fa';
 import { MdKeyboardArrowUp, MdKeyboardArrowDown } from 'react-icons/md';
 
 
@@ -476,6 +476,35 @@ const BoundaryControls = ({ showBoundaries, setShowBoundaries }) => {
   );
 };
 
+// PauseScreen component to display when camera control is inactive
+const PauseScreen = ({ isCameraControlActive, onActivate }) => {
+  if (isCameraControlActive) return null;
+  
+  return (
+    <div 
+      className="pause-screen"
+      onClick={onActivate}
+      style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: '100%',
+        backgroundColor: 'rgba(0, 0, 0, 0.3)',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 1000,
+        cursor: 'pointer',
+      }}
+    >
+      <FaPause size={64} color="white" style={{ marginBottom: '20px' }} />
+      <h2 style={{ color: 'white', marginBottom: '20px', fontSize: '24px' }}>Click anywhere to continue</h2>
+    </div>
+  );
+};
+
 // Main App component remains mostly the same, but now uses the individual components directly
 const App = () => {
   const [platforms, setPlatforms] = useState(new Set(['0,0']));
@@ -493,6 +522,7 @@ const App = () => {
   const [cameraPosition, setCameraPosition] = useState({ x: 0, y: 0, z: 0 });
   const [cubeLocalPosition, setCubeLocalPosition] = useState({ x: 0, z: 0 });
   const [showBoundaries, setShowBoundaries] = useState(Config.SHOW_BOUNDARIES);
+  const [isLockRequestPending, setIsLockRequestPending] = useState(false);
 
   const fetchedPlatforms = useRef(new Set());
 
@@ -557,6 +587,9 @@ const App = () => {
     const handlePointerLockChange = () => {
       const isLocked = document.pointerLockElement !== null;
       setIsPointerLocked(isLocked);
+      
+      // Reset pending lock request state
+      setIsLockRequestPending(false);
       
       // If pointer lock is lost unexpectedly and camera control was active, turn it off
       if (!isLocked && isCameraControlActive) {
@@ -735,7 +768,38 @@ const App = () => {
     ]));
   };
 
-  // Add these handlers
+  // Add a new safe pointer lock request function
+  const requestPointerLockSafely = (element) => {
+    // If there's already a pending request, don't make another one
+    if (isLockRequestPending) return;
+    
+    // If already locked, don't request again
+    if (document.pointerLockElement) return;
+    
+    try {
+      setIsLockRequestPending(true);
+      element.requestPointerLock();
+      
+      // Set a timeout to reset the pending state if the request doesn't complete
+      setTimeout(() => {
+        setIsLockRequestPending(false);
+      }, 1000); // 1 second timeout
+    } catch (error) {
+      console.error("Pointer lock request failed:", error);
+      setIsLockRequestPending(false);
+    }
+  };
+
+  // Handle activating camera control from pause screen
+  const handleActivateCameraControl = () => {
+    setIsCameraControlActive(true);
+    const canvas = document.querySelector('canvas');
+    if (canvas) {
+      requestPointerLockSafely(canvas);
+    }
+  };
+  
+  // Modify the handleSceneMouseDown function
   const handleSceneMouseDown = (e) => {
     // Handle right click for toggling camera control
     if (e.button === 2) { // Right mouse button
@@ -745,8 +809,7 @@ const App = () => {
       
       // When toggling camera control on, request pointer lock
       if (newControlState) {
-        // Request pointer lock when activating camera control
-        e.target.requestPointerLock();
+        requestPointerLockSafely(e.target);
       } else {
         // Exit pointer lock when deactivating camera control
         if (document.pointerLockElement) {
@@ -761,7 +824,7 @@ const App = () => {
       setIsClickingScene(true);
       // Request pointer lock for the traditional click-and-drag mode
       if (!document.pointerLockElement) {
-        e.target.requestPointerLock();
+        requestPointerLockSafely(e.target);
       }
     }
   };
@@ -809,298 +872,317 @@ const App = () => {
   };
 
   return (
-    <div className="relative flex">
-      {/* Camera Control Mode Indicator - only show if showConfigUI is true */}
-      {showConfigUI && (
-        <div className="absolute top-4 right-4 z-20 bg-black bg-opacity-70 p-2 rounded-lg shadow-md text-white text-sm">
-          <div>
-            <div>Camera Control: {isCameraControlActive ? "Active" : "Inactive"}</div>
-            <div>Pointer Lock: {isPointerLocked ? "Active" : "Inactive"}</div>
-            <div className="text-xs text-gray-400 mt-1">Right-click to toggle camera control</div>
-            <div className="text-xs text-gray-400">ESC to exit camera control</div>
-          </div>
-        </div>
-      )}
-      
-      {/* Geo Location Display - only show if showConfigUI is true */}
-      {showConfigUI && (
-        <div className="absolute top-10 left-[500px] z-20 bg-white bg-opacity-80 p-3 rounded-lg shadow-md">
-          <h3 className="text-sm font-semibold text-gray-700 mb-1">Current Location</h3>
-          <div className="text-xs text-gray-600 mb-2">
-            <div>Latitude: {playerPosition.lat.toFixed(6)}°</div>
-            <div>Longitude: {playerPosition.lng.toFixed(6)}°</div>
-            <div className="mt-2 pt-2 border-t border-gray-200">
-              <div className="font-semibold text-gray-700">Debug: Local Position</div>
-              <div>X: {cubeLocalPosition.x.toFixed(3)}</div>
-              <div>Z: {cubeLocalPosition.z.toFixed(3)}</div>
-              <div className="mt-1">Chunk: {currentChunk}</div>
-              <div>Chunk X: {Math.floor((cubeLocalPosition.x + Config.CHUNK_SIZE / 2) / Config.CHUNK_SIZE)}</div>
-              <div>Chunk Z: {Math.floor((cubeLocalPosition.z + Config.CHUNK_SIZE / 2) / Config.CHUNK_SIZE)}</div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* SplatManager - only show if showConfigUI is true */}
-      {showConfigUI && (
-        <SplatManager
-          playerPosition={playerPosition}
-          onSplatSelection={handleSplatSelection}
-          selectedSplat={selectedSplat}
-          onTeleport={teleportToLocation}
-          onSplatListUpdate={handleSplatListUpdate}
-          onUpdateSplatProperty={handleModelChange}
-        />
-      )}
-
-      {/* Selected splat panel - only show if showConfigUI is true and a splat is selected */}
-      {showConfigUI && selectedSplat && (
-        <div className="absolute top-10 left-10 z-10 bg-white p-4 rounded shadow-lg flex flex-col gap-4">
-          <h3 className="font-medium">{selectedSplat.name}</h3>
-
-          {/* Add toggle for visibility */}
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-gray-700">Visibility</span>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                className="sr-only peer"
-                checked={!selectedSplat.hidden}
-                onChange={(e) => handleModelChange('hidden', !e.target.checked)}
-              />
-              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-              <span className="ml-2 text-sm font-medium text-gray-700">{selectedSplat.hidden ? 'Hidden' : 'Visible'}</span>
-            </label>
-          </div>
-
-          {/* Existing coordinate controls */}
-          <div className="space-y-2">
-            <h4 className="text-sm font-medium text-gray-700">Coordinates</h4>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="block text-xs text-gray-500">Latitude</label>
-                <input
-                  type="number"
-                  value={selectedSplat.coordinates?.lat || 0}
-                  onChange={(e) => handleCoordinateChange(parseFloat(e.target.value), selectedSplat.coordinates?.lng || 0)}
-                  step="0.000001"
-                  className="w-full px-2 py-1 text-sm border rounded"
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-gray-500">Longitude</label>
-                <input
-                  type="number"
-                  value={selectedSplat.coordinates?.lng || 0}
-                  onChange={(e) => handleCoordinateChange(selectedSplat.coordinates?.lat || 0, parseFloat(e.target.value))}
-                  step="0.000001"
-                  className="w-full px-2 py-1 text-sm border rounded"
-                />
-              </div>
-            </div>
-            <button
-              className="w-full px-2 py-1 text-xs bg-blue-50 text-blue-600 rounded hover:bg-blue-100"
-              onClick={() => handleModelChange('coordinates', { lat: playerPosition.lat, lng: playerPosition.lng })}
-            >
-              Use Current Position
-            </button>
-          </div>
-
-          {/* Existing transform controls */}
-          {['position', 'rotation'].map(axis => selectedSplat[axis].map((value, index) => (
-            <Slider
-              key={`${axis}-${index}`}
-              label={`${axis.charAt(0).toUpperCase() + axis.slice(1)} ${['X', 'Y', 'Z'][index]}`}
-              value={value}
-              onChange={e => handleModelChange(axis, parseFloat(e.target.value), index)}
-              min={axis === 'position' ? (index === 1 ? 0 : -5) : -3.14}
-              max={axis === 'position' ? (index === 1 ? 15 : 10) : 3.14}
-              step="0.1"
-            />
-          )))}
-          <Slider
-            label="Scale"
-            value={selectedSplat.scale[0]}
-            onChange={e => handleModelChange('scale', parseFloat(e.target.value))}
-            min="0.1"
-            max="10"
-            step="0.1"
-          />
-          <button
-            className={`mt-2 px-4 py-2 rounded ${isSaving ? 'bg-gray-500' : 'bg-green-500'} text-white`}
-            onClick={handleSavePosition}
-            disabled={isSaving}
-          >
-            {isSaving ? 'Saving...' : 'Save'}
-          </button>
-        </div>
-      )}
-
-      {/* Boundary controls - only show if showConfigUI is true */}
-      {showConfigUI && (
-        <BoundaryControls 
-          showBoundaries={showBoundaries} 
-          setShowBoundaries={setShowBoundaries} 
-        />
-      )}
-
-      {/* Add the minimap component - keep this visible for all users */}
-      <Minimap 
-        currentChunk={currentChunk}
-        platforms={platforms}
-        playerPosition={{ 
-          x: cubeLocalPosition.x, 
-          z: cubeLocalPosition.z 
-        }}
-        data={data}
-        chunkSize={Config.CHUNK_SIZE}
-        playerDirection={playerDirection}
-        showConfigUI={showConfigUI}
-      />
-      
-      {/* F9 tip indicator - only show in dev mode and only when config is hidden */}
-      {!isProduction && !showConfigUI && (
-        <div className="absolute bottom-2 right-2 z-20 text-xs text-white bg-black bg-opacity-30 px-2 py-1 rounded">
-          Press F9 to show config panels
-        </div>
-      )}
-
-      {/* Keyboard controls guide - only show when config UI is hidden */}
-      {!showConfigUI && (
-        <div className="absolute left-6 top-6 z-20 bg-white bg-opacity-80 backdrop-blur-sm p-3 rounded-lg shadow-md text-xs text-gray-800">
-          <div className="font-medium text-sm mb-2">Keyboard Controls</div>
-          <div className="grid grid-cols-[auto_auto] gap-x-4 gap-y-2">
-            {/* ZQSD keys in T-shape layout with improved spacing */}
-            <div className="grid grid-cols-3 gap-x-1 gap-y-2 place-items-center">
-              <div className="col-start-2 mb-1">
-                <kbd className="px-2 py-1 text-xs font-sans font-semibold bg-gray-100 border border-gray-300 rounded shadow-sm">Z</kbd>
-              </div>
-              <div className="col-start-1 row-start-2">
-                <kbd className="px-2 py-1 text-xs font-sans font-semibold bg-gray-100 border border-gray-300 rounded shadow-sm">Q</kbd>
-              </div>
-              <div className="col-start-2 row-start-2">
-                <kbd className="px-2 py-1 text-xs font-sans font-semibold bg-gray-100 border border-gray-300 rounded shadow-sm">S</kbd>
-              </div>
-              <div className="col-start-3 row-start-2">
-                <kbd className="px-2 py-1 text-xs font-sans font-semibold bg-gray-100 border border-gray-300 rounded shadow-sm">D</kbd>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <FaArrowsAlt className="text-gray-600" />
-              <span>Move</span>
-            </div>
-
-            <div className="flex items-center">
-              <kbd className="px-2 py-1 text-xs font-sans font-semibold bg-gray-100 border border-gray-300 rounded shadow-sm">Shift</kbd>
-            </div>
-            <div className="flex items-center gap-2">
-              <MdKeyboardArrowUp className="text-gray-600 text-base" />
-              <span>Ascend</span>
-            </div>
-
-            <div className="flex items-center">
-              <kbd className="px-2 py-1 text-xs font-sans font-semibold bg-gray-100 border border-gray-300 rounded shadow-sm">Ctrl</kbd>
-            </div>
-            <div className="flex items-center gap-2">
-              <MdKeyboardArrowDown className="text-gray-600 text-base" />
-              <span>Descend</span>
-            </div>
-
-            <div className="flex items-center">
-              <kbd className="px-2 py-1 text-xs font-sans font-semibold bg-gray-100 border border-gray-300 rounded shadow-sm">Mouse</kbd>
-            </div>
-            <div className="flex items-center gap-2">
-              <FaEye className="text-gray-600" />
-              <span>Look around</span>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <Canvas
-        shadows
-        dpr={[1, 1.5]}
-        className={isPointerLocked ? 'cursor-none' : ''}
-        camera={{ position: [0, 2, 0], fov: 50 }}
-        style={{ width: '100vw', height: '100vh' }}
-        onMouseDown={handleSceneMouseDown}
-        onMouseUp={handleSceneMouseUp}
-        onContextMenu={handleContextMenu}
-      >
-        {Config.VOID_MODE && <color attach="background" args={['#001122']} />}
-        <SceneController
-          onMove={handleCubeMove}
-          onRotate={handleCameraRotation}
-          onCameraMove={handleCameraMove}
-          isPointerLocked={isPointerLocked}
-          isClickingScene={isClickingScene}
-          isCameraControlActive={isCameraControlActive}
+    <div className="app-container" onContextMenu={handleContextMenu}>
+      <div className="main-container">
+        {/* Add the PauseScreen component */}
+        <PauseScreen 
+          isCameraControlActive={isCameraControlActive} 
+          onActivate={handleActivateCameraControl} 
         />
         
-        {/* Render ground tiles */}
-        {!Config.VOID_MODE && [...platforms].filter(pos => data[pos]).map(pos => {
-          const [chunkX, chunkZ] = pos.split(',').map(Number);
-          return (
-            <Platform
-              key={`platform-${pos}`}
-              position={[chunkX * Config.CHUNK_SIZE, 0, chunkZ * Config.CHUNK_SIZE]}
-              texture={data[pos].texture}
-            />
-          );
-        })}
-
-        {/* Render all splats using direct GPS coordinates */}
-        {allSplats.map(splat => {
-          if (!splat.coordinates) return null;
+        {/* Rest of your existing JSX */}
+        <div className="scene-container">
+          {/* Camera Control Mode Indicator - only show if showConfigUI is true */}
+          {showConfigUI && (
+            <div className="absolute top-4 right-4 z-20 bg-black bg-opacity-70 p-2 rounded-lg shadow-md text-white text-sm">
+              <div>
+                <div>Camera Control: {isCameraControlActive ? "Active" : "Inactive"}</div>
+                <div>Pointer Lock: {isPointerLocked ? "Active" : "Inactive"}</div>
+                <div className="text-xs text-gray-400 mt-1">Right-click to toggle camera control</div>
+                <div className="text-xs text-gray-400">ESC to exit camera control</div>
+              </div>
+            </div>
+          )}
           
-          // Convert GPS coordinates to local 3D position
-          const localPos = MapUtils.gpsToLocalPosition(
-            splat.coordinates.lat,
-            splat.coordinates.lng,
-            Config.INITIAL_POSITION.lat,
-            Config.INITIAL_POSITION.lng
-          );
+          {/* Geo Location Display - only show if showConfigUI is true */}
+          {showConfigUI && (
+            <div className="absolute top-10 left-[500px] z-20 bg-white bg-opacity-80 p-3 rounded-lg shadow-md">
+              <h3 className="text-sm font-semibold text-gray-700 mb-1">Current Location</h3>
+              <div className="text-xs text-gray-600 mb-2">
+                <div>Latitude: {playerPosition.lat.toFixed(6)}°</div>
+                <div>Longitude: {playerPosition.lng.toFixed(6)}°</div>
+                <div className="mt-2 pt-2 border-t border-gray-200">
+                  <div className="font-semibold text-gray-700">Debug: Local Position</div>
+                  <div>X: {cubeLocalPosition.x.toFixed(3)}</div>
+                  <div>Z: {cubeLocalPosition.z.toFixed(3)}</div>
+                  <div className="mt-1">Chunk: {currentChunk}</div>
+                  <div>Chunk X: {Math.floor((cubeLocalPosition.x + Config.CHUNK_SIZE / 2) / Config.CHUNK_SIZE)}</div>
+                  <div>Chunk Z: {Math.floor((cubeLocalPosition.z + Config.CHUNK_SIZE / 2) / Config.CHUNK_SIZE)}</div>
+                </div>
+              </div>
+            </div>
+          )}
 
-          // Apply the splat's position array as an offset to the GPS-based position
-          const finalPosition = [
-            localPos.x + (splat.position ? splat.position[0] : 0),
-            splat.position ? splat.position[1] : 1,
-            localPos.z + (splat.position ? splat.position[2] : 0)
-          ];
+          {/* SplatManager - only show if showConfigUI is true */}
+          {showConfigUI && (
+            <SplatManager
+              playerPosition={playerPosition}
+              onSplatSelection={handleSplatSelection}
+              selectedSplat={selectedSplat}
+              onTeleport={teleportToLocation}
+              onSplatListUpdate={handleSplatListUpdate}
+              onUpdateSplatProperty={handleModelChange}
+            />
+          )}
 
-          // Check if this splat is currently selected
-          const isSelected = selectedSplat && selectedSplat.id === splat.id;
+          {/* Selected splat panel - only show if showConfigUI is true and a splat is selected */}
+          {showConfigUI && selectedSplat && (
+            <div className="absolute top-10 left-10 z-10 bg-white p-4 rounded shadow-lg flex flex-col gap-4">
+              <h3 className="font-medium">{selectedSplat.name}</h3>
 
-          // Skip rendering if splat is marked as hidden
-          if (splat.hidden) return null;
+              {/* Add toggle for visibility */}
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-gray-700">Visibility</span>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="sr-only peer"
+                    checked={!selectedSplat.hidden}
+                    onChange={(e) => handleModelChange('hidden', !e.target.checked)}
+                  />
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                  <span className="ml-2 text-sm font-medium text-gray-700">{selectedSplat.hidden ? 'Hidden' : 'Visible'}</span>
+                </label>
+              </div>
 
-          return (
-            <Suspense key={splat.id} fallback={null}>
-              <group 
-                position={finalPosition}
-                renderOrder={1}
-              >
-                <SplatModel 
-                  splatData={{
-                    ...splat,
-                    // Override the position with [0,0,0] since we've already positioned the group
-                    position: [0, 0, 0]
-                  }} 
-                  cameraPosition={cameraPosition}
-                  isSelected={isSelected}
-                  showBoundary={showBoundaries}
+              {/* Existing coordinate controls */}
+              <div className="space-y-2">
+                <h4 className="text-sm font-medium text-gray-700">Coordinates</h4>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-xs text-gray-500">Latitude</label>
+                    <input
+                      type="number"
+                      value={selectedSplat.coordinates?.lat || 0}
+                      onChange={(e) => handleCoordinateChange(parseFloat(e.target.value), selectedSplat.coordinates?.lng || 0)}
+                      step="0.000001"
+                      className="w-full px-2 py-1 text-sm border rounded"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500">Longitude</label>
+                    <input
+                      type="number"
+                      value={selectedSplat.coordinates?.lng || 0}
+                      onChange={(e) => handleCoordinateChange(selectedSplat.coordinates?.lat || 0, parseFloat(e.target.value))}
+                      step="0.000001"
+                      className="w-full px-2 py-1 text-sm border rounded"
+                    />
+                  </div>
+                </div>
+                <button
+                  className="w-full px-2 py-1 text-xs bg-blue-50 text-blue-600 rounded hover:bg-blue-100"
+                  onClick={() => handleModelChange('coordinates', { lat: playerPosition.lat, lng: playerPosition.lng })}
+                >
+                  Use Current Position
+                </button>
+              </div>
+
+              {/* Existing transform controls */}
+              {['position', 'rotation'].map(axis => selectedSplat[axis].map((value, index) => (
+                <Slider
+                  key={`${axis}-${index}`}
+                  label={`${axis.charAt(0).toUpperCase() + axis.slice(1)} ${['X', 'Y', 'Z'][index]}`}
+                  value={value}
+                  onChange={e => handleModelChange(axis, parseFloat(e.target.value), index)}
+                  min={axis === 'position' ? (index === 1 ? 0 : -5) : -3.14}
+                  max={axis === 'position' ? (index === 1 ? 15 : 10) : 3.14}
+                  step="0.1"
                 />
-              </group>
-            </Suspense>
-          );
-        })}
+              )))}
+              <Slider
+                label="Scale"
+                value={selectedSplat.scale[0]}
+                onChange={e => handleModelChange('scale', parseFloat(e.target.value))}
+                min="0.1"
+                max="10"
+                step="0.1"
+              />
+              <button
+                className={`mt-2 px-4 py-2 rounded ${isSaving ? 'bg-gray-500' : 'bg-green-500'} text-white`}
+                onClick={handleSavePosition}
+                disabled={isSaving}
+              >
+                {isSaving ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+          )}
 
-        {Config.VOID_MODE && <SkyWithSun />}
-        <directionalLight position={[10, 10, 10]} intensity={1.0} />
-        <pointLight position={[0, 10, 0]} intensity={1.5} />
-        <ambientLight intensity={1.5 * Math.PI} />
-        <directionalLight intensity={1} position={[50, 50, -100]} castShadow />
-      </Canvas>
+          {/* Boundary controls - only show if showConfigUI is true */}
+          {showConfigUI && (
+            <BoundaryControls 
+              showBoundaries={showBoundaries} 
+              setShowBoundaries={setShowBoundaries} 
+            />
+          )}
+
+          {/* Add the minimap component - keep this visible for all users */}
+          <Minimap 
+            currentChunk={currentChunk}
+            platforms={platforms}
+            playerPosition={{ 
+              x: cubeLocalPosition.x, 
+              z: cubeLocalPosition.z 
+            }}
+            data={data}
+            chunkSize={Config.CHUNK_SIZE}
+            playerDirection={playerDirection}
+            showConfigUI={showConfigUI}
+          />
+          
+          {/* F9 tip indicator - only show in dev mode and only when config is hidden */}
+          {!isProduction && !showConfigUI && (
+            <div className="absolute bottom-2 right-2 z-20 text-xs text-white bg-black bg-opacity-30 px-2 py-1 rounded">
+              Press F9 to show config panels
+            </div>
+          )}
+
+          {/* Keyboard controls guide - only show when config UI is hidden */}
+          {!showConfigUI && (
+            <div className="absolute left-6 top-6 z-20 bg-white bg-opacity-80 backdrop-blur-sm p-3 rounded-lg shadow-md text-xs text-gray-800">
+              <div className="font-medium text-sm mb-2">Keyboard Controls</div>
+              <div className="grid grid-cols-[auto_auto] gap-x-4 gap-y-2">
+                {/* ZQSD keys in T-shape layout with improved spacing */}
+                <div className="grid grid-cols-3 gap-x-1 gap-y-2 place-items-center">
+                  <div className="col-start-2 mb-1">
+                    <kbd className="px-2 py-1 text-xs font-sans font-semibold bg-gray-100 border border-gray-300 rounded shadow-sm">Z</kbd>
+                  </div>
+                  <div className="col-start-1 row-start-2">
+                    <kbd className="px-2 py-1 text-xs font-sans font-semibold bg-gray-100 border border-gray-300 rounded shadow-sm">Q</kbd>
+                  </div>
+                  <div className="col-start-2 row-start-2">
+                    <kbd className="px-2 py-1 text-xs font-sans font-semibold bg-gray-100 border border-gray-300 rounded shadow-sm">S</kbd>
+                  </div>
+                  <div className="col-start-3 row-start-2">
+                    <kbd className="px-2 py-1 text-xs font-sans font-semibold bg-gray-100 border border-gray-300 rounded shadow-sm">D</kbd>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <FaArrowsAlt className="text-gray-600" />
+                  <span>Move</span>
+                </div>
+
+                <div className="flex items-center">
+                  <kbd className="px-2 py-1 text-xs font-sans font-semibold bg-gray-100 border border-gray-300 rounded shadow-sm">Shift</kbd>
+                </div>
+                <div className="flex items-center gap-2">
+                  <MdKeyboardArrowUp className="text-gray-600 text-base" />
+                  <span>Ascend</span>
+                </div>
+
+                <div className="flex items-center">
+                  <kbd className="px-2 py-1 text-xs font-sans font-semibold bg-gray-100 border border-gray-300 rounded shadow-sm">Ctrl</kbd>
+                </div>
+                <div className="flex items-center gap-2">
+                  <MdKeyboardArrowDown className="text-gray-600 text-base" />
+                  <span>Descend</span>
+                </div>
+
+                <div className="flex items-center">
+                  <kbd className="px-2 py-1 text-xs font-sans font-semibold bg-gray-100 border border-gray-300 rounded shadow-sm">Mouse</kbd>
+                </div>
+                <div className="flex items-center gap-2">
+                  <FaEye className="text-gray-600" />
+                  <span>Look around</span>
+                </div>
+                
+                <div className="flex items-center">
+                  <kbd className="px-2 py-1 text-xs font-sans font-semibold bg-gray-100 border border-gray-300 rounded shadow-sm">ESC</kbd>
+                </div>
+                <div className="flex items-center gap-2">
+                  <FaPause className="text-gray-600" />
+                  <span>Pause </span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <Canvas
+            shadows
+            dpr={[1, 1.5]}
+            className={isPointerLocked ? 'cursor-none' : ''}
+            camera={{ position: [0, 2, 0], fov: 50 }}
+            style={{ width: '100vw', height: '100vh' }}
+            onMouseDown={handleSceneMouseDown}
+            onMouseUp={handleSceneMouseUp}
+            onContextMenu={handleContextMenu}
+          >
+            {Config.VOID_MODE && <color attach="background" args={['#001122']} />}
+            <SceneController
+              onMove={handleCubeMove}
+              onRotate={handleCameraRotation}
+              onCameraMove={handleCameraMove}
+              isPointerLocked={isPointerLocked}
+              isClickingScene={isClickingScene}
+              isCameraControlActive={isCameraControlActive}
+            />
+            
+            {/* Render ground tiles */}
+            {!Config.VOID_MODE && [...platforms].filter(pos => data[pos]).map(pos => {
+              const [chunkX, chunkZ] = pos.split(',').map(Number);
+              return (
+                <Platform
+                  key={`platform-${pos}`}
+                  position={[chunkX * Config.CHUNK_SIZE, 0, chunkZ * Config.CHUNK_SIZE]}
+                  texture={data[pos].texture}
+                />
+              );
+            })}
+
+            {/* Render all splats using direct GPS coordinates */}
+            {allSplats.map(splat => {
+              if (!splat.coordinates) return null;
+              
+              // Convert GPS coordinates to local 3D position
+              const localPos = MapUtils.gpsToLocalPosition(
+                splat.coordinates.lat,
+                splat.coordinates.lng,
+                Config.INITIAL_POSITION.lat,
+                Config.INITIAL_POSITION.lng
+              );
+
+              // Apply the splat's position array as an offset to the GPS-based position
+              const finalPosition = [
+                localPos.x + (splat.position ? splat.position[0] : 0),
+                splat.position ? splat.position[1] : 1,
+                localPos.z + (splat.position ? splat.position[2] : 0)
+              ];
+
+              // Check if this splat is currently selected
+              const isSelected = selectedSplat && selectedSplat.id === splat.id;
+
+              // Skip rendering if splat is marked as hidden
+              if (splat.hidden) return null;
+
+              return (
+                <Suspense key={splat.id} fallback={null}>
+                  <group 
+                    position={finalPosition}
+                    renderOrder={1}
+                  >
+                    <SplatModel 
+                      splatData={{
+                        ...splat,
+                        // Override the position with [0,0,0] since we've already positioned the group
+                        position: [0, 0, 0]
+                      }} 
+                      cameraPosition={cameraPosition}
+                      isSelected={isSelected}
+                      showBoundary={showBoundaries}
+                    />
+                  </group>
+                </Suspense>
+              );
+            })}
+
+            {Config.VOID_MODE && <SkyWithSun />}
+            <directionalLight position={[10, 10, 10]} intensity={1.0} />
+            <pointLight position={[0, 10, 0]} intensity={1.5} />
+            <ambientLight intensity={1.5 * Math.PI} />
+            <directionalLight intensity={1} position={[50, 50, -100]} castShadow />
+          </Canvas>
+        </div>
+      </div>
     </div>
   );
 };
