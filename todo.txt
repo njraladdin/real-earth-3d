@@ -74,13 +74,13 @@ TODO :
 - cover road from dar until ayyad castle (road + historical monument)
 
 FUTURE TODOS:
-- add minimap 
-- load character in a good place 
-- invisible borders 
-- hide config UI 
-- add intro animation 
+- add minimap, done 
+- load character in a good place, done 
+- hide config UI, done 
 - add clear movement control  
+- add intro animation 
 - don't load all splats at once 
+- fix render order 
 
 
 

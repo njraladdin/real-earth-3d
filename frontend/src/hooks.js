@@ -60,13 +60,44 @@ export const useVelocity = (isPointerLocked) => {
 export const useCameraController = (cubeRef, isPointerLocked) => {
   const { camera } = useThree();
   const [theta, setTheta] = useState(0);
-  const [phi, setPhi] = useState(0);
+  const [phi, setPhi] = useState(-0.1); // Slight upward angle for better initial view
   const velocity = useVelocity(isPointerLocked);
+
+  // New effect to set initial camera position and rotation
+  useEffect(() => {
+    if (cubeRef.current) {
+      const { x, y, z } = cubeRef.current.position;
+      
+      // Set camera to player position
+      if (isFPS) {
+        camera.position.set(x, y, z);
+      } else {
+        // Third-person camera positioning
+        const radius = 20;
+        const offsetY = y + radius * Math.sin(phi) + 0.5;
+        const distance = radius * Math.cos(phi);
+        camera.position.set(
+          x + distance * Math.sin(theta),
+          offsetY,
+          z + distance * Math.cos(theta)
+        );
+        camera.lookAt(x, y, z);
+      }
+    }
+    
+    // Set initial camera rotation
+    camera.rotation.set(phi, theta, 0);
+    camera.rotation.order = 'YXZ';
+  }, [cubeRef.current]);
 
   useEffect(() => {
     // Increase FOV here
     camera.fov = 75; // Set desired FOV value
     camera.updateProjectionMatrix();
+    
+    // Set initial camera rotation on mount
+    camera.rotation.set(phi, theta, 0);
+    camera.rotation.order = 'YXZ';
 
     const handleMouseMove = ({ movementX, movementY }) => {
       if (isPointerLocked) {

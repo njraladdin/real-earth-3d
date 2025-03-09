@@ -20,9 +20,11 @@ import MapUtils from '../utils/MapUtils';
 
 //Config module 
 const Config = { API_KEY: '5bpPlOMeEXIFV9UuKHrW', CHUNK_SIZE: 10, 
-  INITIAL_POSITION: { lat: 33.80358961071113, lng: 10.951546694824309 }, ZOOM_LEVEL: 20, 
+  INITIAL_POSITION: { lat: 33.803628, lng: 10.951568 }, ZOOM_LEVEL: 20, 
 VOID_MODE: false, SHOW_BOUNDARIES: false };
 
+// Check if we're in production mode
+const isProduction = process.env.NODE_ENV === 'production';
 
 // Utils module removed and replaced with import from MapUtils
 
@@ -40,7 +42,7 @@ const Cube = forwardRef(({ onMove, camera, isPointerLocked, isCameraControlActiv
     }
   });
   return (
-    <mesh ref={ref} position={[0, 1, 0]}>
+    <mesh ref={ref} position={[0, 1.7, 0]}>
       <boxGeometry args={[0.07, 0.1, 0.05]} />
       <meshStandardMaterial color="red" />
     </mesh>
@@ -484,7 +486,8 @@ const App = () => {
   const [allSplats, setAllSplats] = useState([]);
   const [selectedSplat, setSelectedSplat] = useState(null);
   const [isClickingScene, setIsClickingScene] = useState(false);
-  const [isCameraControlActive, setIsCameraControlActive] = useState(false);
+  const [showConfigUI, setShowConfigUI] = useState(!isProduction);
+  const [isCameraControlActive, setIsCameraControlActive] = useState(!showConfigUI);
   const [cameraPosition, setCameraPosition] = useState({ x: 0, y: 0, z: 0 });
   const [cubeLocalPosition, setCubeLocalPosition] = useState({ x: 0, z: 0 });
   const [showBoundaries, setShowBoundaries] = useState(Config.SHOW_BOUNDARIES);
@@ -774,11 +777,23 @@ const App = () => {
     setCameraPosition(position);
   };
 
-  // Add effect to sync global boundary state with keyboard
+  // Add effect for F9 key handler to toggle UI elements
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === 'b' || e.key === 'B') {
         setShowBoundaries(prev => !prev);
+      }
+      
+      // Toggle config UI with F9 key
+      if (e.key === 'F9') {
+        setShowConfigUI(prev => {
+          const newConfigUIState = !prev;
+          // When hiding config UI, automatically enable camera control
+          if (!newConfigUIState) {
+            setIsCameraControlActive(true);
+          }
+          return newConfigUIState;
+        });
       }
     };
     
@@ -793,43 +808,51 @@ const App = () => {
 
   return (
     <div className="relative flex">
-      {/* Camera Control Mode Indicator */}
-      <div className="absolute top-4 right-4 z-20 bg-black bg-opacity-70 p-2 rounded-lg shadow-md text-white text-sm">
-        <div>
-          <div>Camera Control: {isCameraControlActive ? "Active" : "Inactive"}</div>
-          <div>Pointer Lock: {isPointerLocked ? "Active" : "Inactive"}</div>
-          <div className="text-xs text-gray-400 mt-1">Right-click to toggle camera control</div>
-          <div className="text-xs text-gray-400">ESC to exit camera control</div>
-        </div>
-      </div>
-      
-      {/* Geo Location Display with added local position and chunk */}
-      <div className="absolute top-10 left-[500px] z-20 bg-white bg-opacity-80 p-3 rounded-lg shadow-md">
-        <h3 className="text-sm font-semibold text-gray-700 mb-1">Current Location</h3>
-        <div className="text-xs text-gray-600 mb-2">
-          <div>Latitude: {playerPosition.lat.toFixed(6)}°</div>
-          <div>Longitude: {playerPosition.lng.toFixed(6)}°</div>
-          <div className="mt-2 pt-2 border-t border-gray-200">
-            <div className="font-semibold text-gray-700">Debug: Local Position</div>
-            <div>X: {cubeLocalPosition.x.toFixed(3)}</div>
-            <div>Z: {cubeLocalPosition.z.toFixed(3)}</div>
-            <div className="mt-1">Chunk: {currentChunk}</div>
-            <div>Chunk X: {Math.floor((cubeLocalPosition.x + Config.CHUNK_SIZE / 2) / Config.CHUNK_SIZE)}</div>
-            <div>Chunk Z: {Math.floor((cubeLocalPosition.z + Config.CHUNK_SIZE / 2) / Config.CHUNK_SIZE)}</div>
+      {/* Camera Control Mode Indicator - only show if showConfigUI is true */}
+      {showConfigUI && (
+        <div className="absolute top-4 right-4 z-20 bg-black bg-opacity-70 p-2 rounded-lg shadow-md text-white text-sm">
+          <div>
+            <div>Camera Control: {isCameraControlActive ? "Active" : "Inactive"}</div>
+            <div>Pointer Lock: {isPointerLocked ? "Active" : "Inactive"}</div>
+            <div className="text-xs text-gray-400 mt-1">Right-click to toggle camera control</div>
+            <div className="text-xs text-gray-400">ESC to exit camera control</div>
           </div>
         </div>
-      </div>
+      )}
+      
+      {/* Geo Location Display - only show if showConfigUI is true */}
+      {showConfigUI && (
+        <div className="absolute top-10 left-[500px] z-20 bg-white bg-opacity-80 p-3 rounded-lg shadow-md">
+          <h3 className="text-sm font-semibold text-gray-700 mb-1">Current Location</h3>
+          <div className="text-xs text-gray-600 mb-2">
+            <div>Latitude: {playerPosition.lat.toFixed(6)}°</div>
+            <div>Longitude: {playerPosition.lng.toFixed(6)}°</div>
+            <div className="mt-2 pt-2 border-t border-gray-200">
+              <div className="font-semibold text-gray-700">Debug: Local Position</div>
+              <div>X: {cubeLocalPosition.x.toFixed(3)}</div>
+              <div>Z: {cubeLocalPosition.z.toFixed(3)}</div>
+              <div className="mt-1">Chunk: {currentChunk}</div>
+              <div>Chunk X: {Math.floor((cubeLocalPosition.x + Config.CHUNK_SIZE / 2) / Config.CHUNK_SIZE)}</div>
+              <div>Chunk Z: {Math.floor((cubeLocalPosition.z + Config.CHUNK_SIZE / 2) / Config.CHUNK_SIZE)}</div>
+            </div>
+          </div>
+        </div>
+      )}
 
-      <SplatManager
-        playerPosition={playerPosition}
-        onSplatSelection={handleSplatSelection}
-        selectedSplat={selectedSplat}
-        onTeleport={teleportToLocation}
-        onSplatListUpdate={handleSplatListUpdate}
-        onUpdateSplatProperty={handleModelChange}
-      />
+      {/* SplatManager - only show if showConfigUI is true */}
+      {showConfigUI && (
+        <SplatManager
+          playerPosition={playerPosition}
+          onSplatSelection={handleSplatSelection}
+          selectedSplat={selectedSplat}
+          onTeleport={teleportToLocation}
+          onSplatListUpdate={handleSplatListUpdate}
+          onUpdateSplatProperty={handleModelChange}
+        />
+      )}
 
-      {selectedSplat && (
+      {/* Selected splat panel - only show if showConfigUI is true and a splat is selected */}
+      {showConfigUI && selectedSplat && (
         <div className="absolute top-10 left-10 z-10 bg-white p-4 rounded shadow-lg flex flex-col gap-4">
           <h3 className="font-medium">{selectedSplat.name}</h3>
 
@@ -911,13 +934,15 @@ const App = () => {
         </div>
       )}
 
-      {/* Add the boundary controls */}
-      <BoundaryControls 
-        showBoundaries={showBoundaries} 
-        setShowBoundaries={setShowBoundaries} 
-      />
+      {/* Boundary controls - only show if showConfigUI is true */}
+      {showConfigUI && (
+        <BoundaryControls 
+          showBoundaries={showBoundaries} 
+          setShowBoundaries={setShowBoundaries} 
+        />
+      )}
 
-      {/* Add the minimap component - now using the imported version */}
+      {/* Add the minimap component - keep this visible for all users */}
       <Minimap 
         currentChunk={currentChunk}
         platforms={platforms}
@@ -928,7 +953,15 @@ const App = () => {
         data={data}
         chunkSize={Config.CHUNK_SIZE}
         playerDirection={playerDirection}
+        showConfigUI={showConfigUI}
       />
+      
+      {/* F9 tip indicator - only show in dev mode and only when config is hidden */}
+      {!isProduction && !showConfigUI && (
+        <div className="absolute bottom-2 right-2 z-20 text-xs text-white bg-black bg-opacity-30 px-2 py-1 rounded">
+          Press F9 to show config panels
+        </div>
+      )}
 
       <Canvas
         shadows

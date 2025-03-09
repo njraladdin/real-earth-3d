@@ -10,8 +10,9 @@ import React from 'react';
  * @param {Object} props.data - Map data with textures
  * @param {number} props.chunkSize - Size of each chunk
  * @param {Object} props.playerDirection - Direction the player is facing
+ * @param {boolean} props.showConfigUI - Whether to show configuration UI elements
  */
-const Minimap = ({ currentChunk, platforms, playerPosition, data, chunkSize, playerDirection }) => {
+const Minimap = ({ currentChunk, platforms, playerPosition, data, chunkSize, playerDirection, showConfigUI }) => {
   // Calculate minimap dimensions
   const minimapSize = 200; // px
   
@@ -27,7 +28,7 @@ const Minimap = ({ currentChunk, platforms, playerPosition, data, chunkSize, pla
   return (
     <div className="absolute right-5 bottom-5 z-10 bg-white bg-opacity-90 rounded-lg shadow-md overflow-hidden">
       <div className="p-2 bg-gray-800 text-white text-xs font-medium">
-        Minimap - Current Chunk: {currentChunk}
+        Minimap {showConfigUI && `- Current Chunk: ${currentChunk}`}
       </div>
       <div 
         style={{ width: `${minimapSize}px`, height: `${minimapSize}px` }} 
@@ -94,19 +95,23 @@ const Minimap = ({ currentChunk, platforms, playerPosition, data, chunkSize, pla
                     }}
                   />
                 ) : (
-                  <div className="text-[8px] text-center mt-4 text-gray-500 transition-opacity duration-300">
-                    {chunkX},{chunkZ}
-                  </div>
+                  showConfigUI && (
+                    <div className="text-[8px] text-center mt-4 text-gray-500 transition-opacity duration-300">
+                      {chunkX},{chunkZ}
+                    </div>
+                  )
                 )}
               </div>
             );
           })}
         </div>
         
-        {/* Debug info */}
-        <div className="absolute bottom-1 left-1 text-[8px] text-black bg-white bg-opacity-60 p-1 rounded">
-          Player: ({playerPosition.x.toFixed(1)}, {playerPosition.z.toFixed(1)})
-        </div>
+        {/* Debug info - only show when config UI is enabled */}
+        {showConfigUI && (
+          <div className="absolute bottom-1 left-1 text-[8px] text-black bg-white bg-opacity-60 p-1 rounded">
+            Player: ({playerPosition.x.toFixed(1)}, {playerPosition.z.toFixed(1)})
+          </div>
+        )}
         
         {/* Fixed player position indicator - always centered */}
         <div 
