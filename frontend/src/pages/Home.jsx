@@ -15,6 +15,8 @@ import { Skybox, SkyWithSun } from '../components/SkyComponents';
 import { SplatManager } from '../components/SplatManager';
 import Minimap from '../components/Minimap';
 import MapUtils from '../utils/MapUtils';
+import { FaArrowsAlt, FaMousePointer, FaEye } from 'react-icons/fa';
+import { MdKeyboardArrowUp, MdKeyboardArrowDown } from 'react-icons/md';
 
 
 
@@ -960,6 +962,58 @@ const App = () => {
       {!isProduction && !showConfigUI && (
         <div className="absolute bottom-2 right-2 z-20 text-xs text-white bg-black bg-opacity-30 px-2 py-1 rounded">
           Press F9 to show config panels
+        </div>
+      )}
+
+      {/* Keyboard controls guide - only show when config UI is hidden */}
+      {!showConfigUI && (
+        <div className="absolute left-6 top-6 z-20 bg-white bg-opacity-80 backdrop-blur-sm p-3 rounded-lg shadow-md text-xs text-gray-800">
+          <div className="font-medium text-sm mb-2">Keyboard Controls</div>
+          <div className="grid grid-cols-[auto_auto] gap-x-4 gap-y-2">
+            {/* ZQSD keys in T-shape layout with improved spacing */}
+            <div className="grid grid-cols-3 gap-x-1 gap-y-2 place-items-center">
+              <div className="col-start-2 mb-1">
+                <kbd className="px-2 py-1 text-xs font-sans font-semibold bg-gray-100 border border-gray-300 rounded shadow-sm">Z</kbd>
+              </div>
+              <div className="col-start-1 row-start-2">
+                <kbd className="px-2 py-1 text-xs font-sans font-semibold bg-gray-100 border border-gray-300 rounded shadow-sm">Q</kbd>
+              </div>
+              <div className="col-start-2 row-start-2">
+                <kbd className="px-2 py-1 text-xs font-sans font-semibold bg-gray-100 border border-gray-300 rounded shadow-sm">S</kbd>
+              </div>
+              <div className="col-start-3 row-start-2">
+                <kbd className="px-2 py-1 text-xs font-sans font-semibold bg-gray-100 border border-gray-300 rounded shadow-sm">D</kbd>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <FaArrowsAlt className="text-gray-600" />
+              <span>Move</span>
+            </div>
+
+            <div className="flex items-center">
+              <kbd className="px-2 py-1 text-xs font-sans font-semibold bg-gray-100 border border-gray-300 rounded shadow-sm">Shift</kbd>
+            </div>
+            <div className="flex items-center gap-2">
+              <MdKeyboardArrowUp className="text-gray-600 text-base" />
+              <span>Ascend</span>
+            </div>
+
+            <div className="flex items-center">
+              <kbd className="px-2 py-1 text-xs font-sans font-semibold bg-gray-100 border border-gray-300 rounded shadow-sm">Ctrl</kbd>
+            </div>
+            <div className="flex items-center gap-2">
+              <MdKeyboardArrowDown className="text-gray-600 text-base" />
+              <span>Descend</span>
+            </div>
+
+            <div className="flex items-center">
+              <kbd className="px-2 py-1 text-xs font-sans font-semibold bg-gray-100 border border-gray-300 rounded shadow-sm">Mouse</kbd>
+            </div>
+            <div className="flex items-center gap-2">
+              <FaEye className="text-gray-600" />
+              <span>Look around</span>
+            </div>
+          </div>
         </div>
       )}
 

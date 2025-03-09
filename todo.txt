@@ -77,7 +77,7 @@ FUTURE TODOS:
 - add minimap, done 
 - load character in a good place, done 
 - hide config UI, done 
-- add clear movement control  
+- add clear movement control  guide 
 - add intro animation 
 - don't load all splats at once 
 - fix render order 
