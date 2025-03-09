@@ -57,7 +57,7 @@ export const useVelocity = (isPointerLocked) => {
   return ref;
 };
 
-export const useCameraController = (cubeRef, isPointerLocked) => {
+export const useCameraController = (cubeRef, isPointerLocked, fov = 75) => {
   const { camera } = useThree();
   const [theta, setTheta] = useState(0);
   const [phi, setPhi] = useState(-0.1); // Slight upward angle for better initial view
@@ -91,8 +91,8 @@ export const useCameraController = (cubeRef, isPointerLocked) => {
   }, [cubeRef.current]);
 
   useEffect(() => {
-    // Increase FOV here
-    camera.fov = 75; // Set desired FOV value
+    // Apply FOV from props
+    camera.fov = fov;
     camera.updateProjectionMatrix();
     
     // Set initial camera rotation on mount

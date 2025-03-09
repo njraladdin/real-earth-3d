@@ -149,11 +149,11 @@ const Slider = ({ label, value, onChange, min, max, step }) => {
   );
 };
 
-const SceneController = ({ onMove, onRotate, onCameraMove, isPointerLocked, isClickingScene, isCameraControlActive }) => {
+const SceneController = ({ onMove, onRotate, onCameraMove, isPointerLocked, isClickingScene, isCameraControlActive, fov }) => {
   const cubeRef = useRef();
   const { camera } = useThree();
 
-  useCameraController(cubeRef, isPointerLocked && (isCameraControlActive || isClickingScene));
+  useCameraController(cubeRef, isPointerLocked && (isCameraControlActive || isClickingScene), fov);
 
   useFrame(() => {
     if (isPointerLocked) {
@@ -454,23 +454,40 @@ const SplatModel = React.memo(({ splatData, cameraPosition, isSelected, showBoun
 });
 
 // Add a BoundaryControls component to the App component
-const BoundaryControls = ({ showBoundaries, setShowBoundaries }) => {
+const BoundaryControls = ({ showBoundaries, setShowBoundaries, fov, setFov }) => {
   return (
-    <div className="absolute bottom-5 left-5 z-10 bg-white p-3 rounded-lg shadow-md">
-      <div className="flex items-center gap-2">
-        <input
-          type="checkbox"
-          id="showBoundaries"
-          checked={showBoundaries}
-          onChange={(e) => setShowBoundaries(e.target.checked)}
-          className="w-4 h-4"
-        />
-        <label htmlFor="showBoundaries" className="text-sm font-medium">
-          Show Splat Boundaries
-        </label>
-      </div>
-      <div className="text-xs text-gray-500 mt-1">
-        Press 'B' key to toggle boundaries
+    <div className="absolute top-4 left-4 bg-white/70 backdrop-blur-md p-4 rounded-lg shadow-lg z-10">
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-medium">Show Boundaries</span>
+          <div
+            className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors ${
+              showBoundaries ? "bg-blue-600" : "bg-gray-300"
+            }`}
+            onClick={() => setShowBoundaries(!showBoundaries)}
+          >
+            <span
+              className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${
+                showBoundaries ? "translate-x-6" : "translate-x-1"
+              }`}
+            />
+          </div>
+        </div>
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium">Field of View</span>
+            <span className="text-xs text-gray-500">{fov}°</span>
+          </div>
+          <input
+            type="range"
+            min="30"
+            max="120"
+            step="5"
+            value={fov}
+            onChange={(e) => setFov(parseInt(e.target.value))}
+            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+          />
+        </div>
       </div>
     </div>
   );
@@ -523,6 +540,7 @@ const App = () => {
   const [cubeLocalPosition, setCubeLocalPosition] = useState({ x: 0, z: 0 });
   const [showBoundaries, setShowBoundaries] = useState(Config.SHOW_BOUNDARIES);
   const [isLockRequestPending, setIsLockRequestPending] = useState(false);
+  const [fov, setFov] = useState(80);
 
   const fetchedPlatforms = useRef(new Set());
 
@@ -1013,6 +1031,8 @@ const App = () => {
             <BoundaryControls 
               showBoundaries={showBoundaries} 
               setShowBoundaries={setShowBoundaries} 
+              fov={fov}
+              setFov={setFov}
             />
           )}
 
@@ -1101,7 +1121,7 @@ const App = () => {
             shadows
             dpr={[1, 1.5]}
             className={isPointerLocked ? 'cursor-none' : ''}
-            camera={{ position: [0, 2, 0], fov: 50 }}
+            camera={{ position: [0, 2, 0], fov: fov }}
             style={{ width: '100vw', height: '100vh' }}
             onMouseDown={handleSceneMouseDown}
             onMouseUp={handleSceneMouseUp}
@@ -1115,6 +1135,7 @@ const App = () => {
               isPointerLocked={isPointerLocked}
               isClickingScene={isClickingScene}
               isCameraControlActive={isCameraControlActive}
+              fov={fov}
             />
             
             {/* Render ground tiles */}
